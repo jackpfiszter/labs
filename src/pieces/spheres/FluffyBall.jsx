@@ -1,4 +1,5 @@
 import React, { useRef, useMemo, useEffect, Suspense } from 'react';
+import { budgetDpr } from '../../pixelBudget.js';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import FitFov from './FitFov.js';
@@ -409,7 +410,7 @@ function Scene() {
           }}
         />
       )}
-      <Canvas dpr={[1, 2]} shadows camera={{ position: [0, 0, cameraDistance], fov: 45 }} gl={{ alpha: true }}>
+      <Canvas dpr={budgetDpr()} shadows camera={{ position: [0, 0, cameraDistance], fov: 45 }} gl={{ alpha: true }}>
         <CameraUpdater distance={cameraDistance} />
         <FitFov fov={45} minAspect={0.78} />
         <ambientLight intensity={0.6} />

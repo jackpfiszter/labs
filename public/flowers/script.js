@@ -9,7 +9,8 @@ const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 10
 camera.position.z = 8;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// Same pixel budget as the React pieces (src/pixelBudget.js): about 2.5M pixels, never below 1x.
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2, Math.max(1, Math.sqrt(2_500_000 / (innerWidth * innerHeight)))));
 document.body.appendChild(renderer.domElement);
 
 // ── Constants ──────────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import * as Tone from 'tone';
 import { gizmoRuntime } from '@gizmo/runtime';
 
@@ -134,7 +135,7 @@ export default function Component() {
     if (!canvas) return;
     const observer = new ResizeObserver(() => {
       const { width, height } = canvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = budgetDpr(width, height);
       canvas.width = Math.max(1, Math.round(width * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
       canvasSize.current = { width, height, dpr };

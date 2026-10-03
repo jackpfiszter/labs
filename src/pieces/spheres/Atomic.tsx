@@ -1,4 +1,5 @@
 import React, { useRef, useMemo, useState, useEffect } from 'react';
+import { budgetDpr } from '../../pixelBudget.js';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Trail } from '@react-three/drei';
 import * as THREE from 'three';
@@ -119,7 +120,7 @@ export default function Component() {
   
   return (
     <div className="h-full w-full overflow-hidden cursor-grab active:cursor-grabbing" style={{ background: backgroundColor }}>
-      <Canvas dpr={[1, 2]} camera={{ position: [0, 5, 10], fov: 50 }}>
+      <Canvas dpr={budgetDpr()} camera={{ position: [0, 5, 10], fov: 50 }}>
         <FitFov fov={50} minAspect={0.75} />
         <Scene />
       </Canvas>

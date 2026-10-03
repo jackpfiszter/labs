@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import { gizmoRuntime } from '@gizmo/runtime';
 import Matter from 'matter-js';
 
@@ -97,7 +98,7 @@ export default function Component() {
         width: width,
         height: height,
         // Integer ratio so Matter's mouse mapping (parseInt of data-pixel-ratio) stays exact
-        pixelRatio: Math.min(2, Math.ceil(window.devicePixelRatio || 1)),
+        pixelRatio: Math.floor(budgetDpr(width, height)),
         wireframes: false,
         background: 'transparent',
         showAngleIndicator: false,

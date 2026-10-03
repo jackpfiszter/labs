@@ -1,4 +1,5 @@
 import React, { useRef, useMemo, Suspense, useEffect } from 'react';
+import { budgetDpr } from '../../pixelBudget.js';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
@@ -550,7 +551,7 @@ export default function Component() {
       <Canvas
         style={{ width: '100%', height: '100%' }}
         shadows={false}
-        dpr={[1, 1.5]} // Capped DPR for performance
+        dpr={Math.min(1.5, budgetDpr())} // Capped DPR for performance
         gl={{ 
           antialias: true, 
           powerPreference: 'high-performance',

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import { gizmoRuntime } from '@gizmo/runtime';
 import { Play, RotateCcw, Eye, Info } from 'lucide-react';
 
@@ -321,8 +322,9 @@ export default function Component() {
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
       if (!w || !h) return;
-      canvas.width = Math.round(w * 2);
-      canvas.height = Math.round(h * 2);
+      const dpr = budgetDpr(w, h);
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
     });
     ro.observe(root);
     ro.observe(canvas);

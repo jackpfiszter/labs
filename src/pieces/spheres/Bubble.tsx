@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo, Suspense } from 'react';
+import { budgetDpr } from '../../pixelBudget.js';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as Tone from 'tone';
 import * as THREE from 'three';
@@ -570,7 +571,7 @@ export default function Component() {
       <div aria-hidden className="absolute inset-0 -z-10" style={{ background: `radial-gradient(circle at center, ${gradientColor1} 0%, ${gradientColor2} 100%)` }} />
       <div className="h-full w-full relative overflow-hidden" style={{ cursor: isBubbleHovered && !isDragging ? 'pointer' : isDragging ? 'grabbing' : 'grab' }}>
         <Canvas
-          dpr={[1, 2]}
+          dpr={budgetDpr()}
           camera={{ position: [0, 0, 8], fov: 50 }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}

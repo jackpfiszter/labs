@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import { gizmoRuntime } from '@gizmo/runtime';
 import * as Tone from 'tone';
 import { Power, Gauge, Volume2, VolumeX } from 'lucide-react';
@@ -54,7 +55,7 @@ const Starfield = ({ speed, starCount, starColor, maxSpeed }: { speed: number; s
     const resize = () => {
       const { width, height } = canvas.getBoundingClientRect();
       if (!width || !height) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = budgetDpr(width, height);
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       const prev = sizeRef.current;

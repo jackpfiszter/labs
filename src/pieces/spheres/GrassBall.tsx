@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useMemo, Suspense } from 'react';
+import { budgetDpr } from '../../pixelBudget.js';
 import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -410,7 +411,7 @@ const Scene = () => {
 
 
   return (
-    <Canvas dpr={[1, 2]}>
+    <Canvas dpr={budgetDpr()}>
       <FitFov fov={75} minAspect={0.68} />
       <SceneContent />
     </Canvas>

@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import { gizmoRuntime } from '@gizmo/runtime';
 import { Upload } from 'lucide-react';
 
@@ -75,8 +76,8 @@ export default function Component() {
 
     const { width: screenWidth, height: screenHeight } = canvas.getBoundingClientRect();
     if (!screenWidth || !screenHeight) return;
-    // Backing store at devicePixelRatio (capped) so the pixel blocks stay crisp
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Backing store at devicePixelRatio (within the pixel budget) so the pixel blocks stay crisp
+    const dpr = budgetDpr(screenWidth, screenHeight);
     const targetW = Math.round(screenWidth * dpr);
     const targetH = Math.round(screenHeight * dpr);
     if (canvas.width !== targetW) canvas.width = targetW;

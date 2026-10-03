@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo, Suspense } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Float, Stars } from '@react-three/drei';
 import * as THREE from 'three';
@@ -698,7 +699,7 @@ export default function Component() {
     >
       <div aria-hidden className="fixed inset-0 -z-10" style={{ background: skyColor }} />
       <div className="absolute inset-0 cursor-grab active:cursor-grabbing">
-        <Canvas camera={{ position: [0, 6, 12], fov: BASE_FOV }} dpr={[1, 2]} gl={{ antialias: true, outputColorSpace: THREE.SRGBColorSpace }}>
+        <Canvas camera={{ position: [0, 6, 12], fov: BASE_FOV }} dpr={budgetDpr()} gl={{ antialias: true, outputColorSpace: THREE.SRGBColorSpace }}>
           <ResponsiveFov />
           <Scene 
             flowers={flowers} 

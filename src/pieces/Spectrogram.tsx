@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import { gizmoRuntime } from '@gizmo/runtime';
 import { Mic, MicOff } from 'lucide-react';
 
@@ -298,7 +299,7 @@ export default function Component() {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const { width: cssWidth, height: cssHeight } = container.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = budgetDpr(cssWidth, cssHeight);
       const width = Math.max(1, Math.round(cssWidth * dpr));
       const height = Math.max(1, Math.round(cssHeight * dpr));
       if (canvas.width === width && canvas.height === height) return;

@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, Suspense } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import { gizmoRuntime } from '@gizmo/runtime';
 import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber';
 import { TextureLoader, Color, RepeatWrapping } from 'three';
@@ -296,7 +297,7 @@ export default function Component() {
           bottom: `${poolMargin}px`,
         }}
       >
-        <Canvas camera={{ position: [0, 0, 1] }} dpr={[1, 2]}>
+        <Canvas camera={{ position: [0, 0, 1] }} dpr={budgetDpr()}>
           <CameraFit />
           <Suspense fallback={null}>
             <PoolShader />

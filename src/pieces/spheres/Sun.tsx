@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useMemo } from 'react';
+import { budgetDpr } from '../../pixelBudget.js';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { gizmoRuntime } from '@gizmo/runtime';
@@ -259,7 +260,7 @@ export default function Component() {
   return (
     <div className="w-full h-full overflow-hidden relative cursor-grab active:cursor-grabbing">
       <Canvas
-        dpr={[1, 2]}
+        dpr={budgetDpr()}
         camera={{ fov: 75, near: 0.1, far: 1000, position: [0, 0, cameraDistance] }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

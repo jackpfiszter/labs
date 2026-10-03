@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useMemo, useState } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import * as THREE from 'three';
 import { Canvas, useFrame, extend, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
@@ -373,7 +374,7 @@ export default function Component() {
       >
         <Canvas 
           shadows 
-          dpr={[1, 2]}
+          dpr={budgetDpr()}
           gl={{ antialias: true, alpha: true }}
           camera={{ fov: 60, near: 0.1, far: 1000 }}
         >

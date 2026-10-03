@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import { Canvas, useFrame, useThree, extend } from '@react-three/fiber';
 import { shaderMaterial, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -404,7 +405,7 @@ export default function Component() {
       <div className="h-screen w-screen cursor-grab active:cursor-grabbing" onPointerDown={handleInteraction} onPointerUp={handleInteraction}>
         <Canvas 
           camera={{ position: [0, 0, defaultZoom], fov: 60 }} 
-          dpr={[1, 2]}
+          dpr={budgetDpr()}
           gl={{ 
             antialias: false, // Disable for pixel art
             powerPreference: "high-performance",

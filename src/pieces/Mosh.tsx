@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import { gizmoRuntime } from '@gizmo/runtime';
 import { Upload } from 'lucide-react';
 
@@ -141,9 +142,9 @@ export default function Component() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas dimensions to match its container, at devicePixelRatio (capped at 2).
+    // Set canvas dimensions to match its container, at devicePixelRatio (within the pixel budget).
     // The effect itself is computed in CSS pixels so it looks the same at any DPR.
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = budgetDpr(size.w, size.h);
     const cssWidth = size.w;
     const cssHeight = size.h;
     const backingWidth = Math.round(cssWidth * dpr);

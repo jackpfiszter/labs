@@ -1,4 +1,5 @@
 import React, { useRef, useState, useMemo, Suspense, useEffect } from 'react';
+import { budgetDpr } from '../../pixelBudget.js';
 import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import * as Tone from 'tone';
@@ -591,7 +592,7 @@ export default function Component() {
   return (
     <div style={{ width: '100%', height: '100%', background: '#000', overflow: 'hidden', position: 'relative', cursor: 'grab' }}>
       <Canvas
-        dpr={[1, 2]}
+        dpr={budgetDpr()}
         shadows
         camera={{ position: [0, 0, 15], fov: 45 }}
         gl={{ antialias: true }}

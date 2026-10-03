@@ -1,4 +1,5 @@
 import React, { useRef, useMemo, Suspense } from 'react';
+import { budgetDpr } from '../../pixelBudget.js';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
@@ -451,7 +452,7 @@ export default function Component() {
 
   return (
     <div style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative', background: '#000', cursor: 'grab' }}>
-      <Canvas dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }}>
+      <Canvas dpr={budgetDpr()} gl={{ antialias: true, powerPreference: 'high-performance' }}>
         <PerspectiveCamera makeDefault position={[0, 0, cameraDistance]} />
         <FitFov fov={50} minAspect={0.5} />
         <OrbitControls enablePan={false} minDistance={4} maxDistance={20} />

@@ -1,4 +1,5 @@
 import React, { useRef, useMemo, Suspense, useEffect } from 'react';
+import { budgetDpr } from '../pixelBudget.js';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { gizmoRuntime } from '@gizmo/runtime';
@@ -343,7 +344,7 @@ export default function Component() {
       <Canvas
         shadows
         gl={{ antialias: true, alpha: true }}
-        dpr={[1, 2]}
+        dpr={budgetDpr()}
       >
         <PerspectiveCamera makeDefault position={[0, 0, 7]} fov={BASE_FOV} />
         <ResponsiveCamera />

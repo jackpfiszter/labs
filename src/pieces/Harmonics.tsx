@@ -48,7 +48,6 @@ const NeumorphicBox = ({ children, className = '', pressed = false, style = {} }
 
 // --- MAIN COMPONENT ---
 export default function Component() {
-  const [isAudioReady, setIsAudioReady] = useState(false);
   const [harmonics, setHarmonics] = useState([1, 0.5, 0.25]);
   const [isListening, setIsListening] = useState(false);
   const [activeNotes, setActiveNotes] = useState<string[]>([]);
@@ -64,6 +63,8 @@ export default function Component() {
     release: 0.5,
   });
   const [draggingAdsrPoint, setDraggingAdsrPoint] = useState<string | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 375, height: 88, dpr: 1 });
+  const [micError, setMicError] = useState<string | null>(null);
 
   const audioEngine = useRef<any>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -94,12 +95,15 @@ export default function Component() {
   }, [attackTime, decayTime, sustainLevel, releaseTime]);
 
   // --- Audio Engine Setup ---
-  useEffect(() => {
-    const initAudio = async () => {
-      await Tone.start();
-      setIsAudioReady(true);
-      gizmoRuntime.performHaptic('medium');
+  // Browsers only allow audio to start from a user gesture, so the synth is
+  // created (and Tone started) on the first press anywhere in the piece.
+  const latestSound = useRef({ harmonics, envelope });
+  latestSound.current = { harmonics, envelope };
 
+  const ensureAudio = () => {
+    if (Tone.getContext().state !== 'running') Tone.start();
+    if (!audioEngine.current.synth) {
+      const { harmonics, envelope } = latestSound.current;
       const synth = new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: 'custom', partials: harmonics },
         envelope: { attack: envelope.attack, decay: envelope.decay, sustain: envelope.sustain, release: envelope.release },
@@ -108,10 +112,11 @@ export default function Component() {
       synth.connect(waveform);
 
       audioEngine.current = { synth, waveform };
-    };
+      gizmoRuntime.performHaptic('medium');
+    }
+  };
 
-    initAudio();
-
+  useEffect(() => {
     return () => {
       if (audioEngine.current.synth) {
         audioEngine.current.synth.dispose();
@@ -126,6 +131,21 @@ export default function Component() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
+  }, []);
+
+  // --- Canvas follows its box, drawn at devicePixelRatio ---
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const observer = new ResizeObserver(() => {
+      const { width, height } = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(1, Math.round(width * dpr));
+      canvas.height = Math.max(1, Math.round(height * dpr));
+      setCanvasSize({ width, height, dpr });
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
   }, []);
 
   // --- Update Synth on Tweak/Harmonic Change ---
@@ -145,8 +165,8 @@ export default function Component() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
+    const { width, height, dpr } = canvasSize;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const midY = height / 2;
 
     const drawAdsrEnvelope = () => {
@@ -264,41 +284,34 @@ export default function Component() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [harmonics, primaryColor, accentColor, activeNotes.length, showAdsrEditor, envelope, draggingAdsrPoint]);
+  }, [harmonics, primaryColor, accentColor, activeNotes.length, showAdsrEditor, envelope, draggingAdsrPoint, canvasSize]);
 
   // --- Interaction Handlers ---
-  const handleInitialPress = async () => {
-    if (!isAudioReady) {
-      await Tone.start();
-      setIsAudioReady(true);
-      gizmoRuntime.performHaptic('medium');
-    }
-  };
-
   const handleHarmonicChange = (index: number, value: number) => {
     const newHarmonics = [...harmonics];
     newHarmonics[index] = value;
     setHarmonics(newHarmonics);
   };
 
-  const handleAdsrTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+  // Pointer position in CSS px relative to the canvas (drawing is in CSS px too).
+  const canvasPoint = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top, width: rect.width, height: rect.height };
+  };
+
+  const handleAdsrPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!showAdsrEditor) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const touch = e.touches[0];
-    const touchX = touch.clientX - rect.left;
-    const touchY = touch.clientY - rect.top;
+    const { x: touchX, y: touchY, width, height } = canvasPoint(e);
 
     const padding = 10;
-    const contentWidth = canvas.width - padding * 2;
+    const contentWidth = width - padding * 2;
 
     const totalTime = envelope.attack + envelope.decay + envelope.release;
     const attackX = padding + (envelope.attack / totalTime) * contentWidth * 0.9;
     const decayX = padding + ((envelope.attack + envelope.decay) / totalTime) * contentWidth * 0.9;
-    const sustainY = canvas.height - (envelope.sustain * (canvas.height - 20)) - 10;
-    const releaseX = canvas.width - padding;
-    const endY = canvas.height - 10;
+    const sustainY = height - (envelope.sustain * (height - 20)) - 10;
+    const releaseX = width - padding;
+    const endY = height - 10;
 
     const points = {
       attack: { x: attackX, y: 10 },
@@ -307,9 +320,11 @@ export default function Component() {
       release: { x: releaseX, y: endY },
     };
 
+    const hitRadius = e.pointerType === 'mouse' ? 14 : 22;
     for (const [key, pos] of Object.entries(points)) {
       const dist = Math.sqrt(Math.pow(touchX - pos.x, 2) + Math.pow(touchY - pos.y, 2));
-      if (dist < 20) { // 20px touch radius
+      if (dist < hitRadius) {
+        e.currentTarget.setPointerCapture(e.pointerId);
         setDraggingAdsrPoint(key);
         gizmoRuntime.performHaptic('light');
         return;
@@ -317,17 +332,9 @@ export default function Component() {
     }
   };
 
-  const handleAdsrTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+  const handleAdsrPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!draggingAdsrPoint || !showAdsrEditor) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const touch = e.touches[0];
-    const touchX = touch.clientX - rect.left;
-    const touchY = touch.clientY - rect.top;
-
-    const width = canvas.width;
-    const height = canvas.height;
+    const { x: touchX, y: touchY, width, height } = canvasPoint(e);
     const padding = 10;
     const contentWidth = width - padding * 2;
 
@@ -364,18 +371,22 @@ export default function Component() {
     });
   };
 
-  const handleAdsrTouchEnd = () => {
+  const handleAdsrPointerUp = () => {
     if (draggingAdsrPoint) {
       setDraggingAdsrPoint(null);
       gizmoRuntime.performHaptic('soft');
     }
   };
 
-  const handleHarmonicTouch = (e: React.TouchEvent<HTMLDivElement>, index: number) => {
+  const handleHarmonicPointer = (e: React.PointerEvent<HTMLDivElement>, index: number) => {
+    if (e.type === 'pointerdown') {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } else if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
+      return; // mouse hovering without a button held
+    }
     const rect = e.currentTarget.getBoundingClientRect();
-    const touch = e.touches[0];
-    if (!touch) return; // Prevent error on touch end
-    const touchY = touch.clientY - rect.top;
+    const touchY = e.clientY - rect.top;
     const value = Math.max(0, Math.min(1, 1 - (touchY / rect.height)));
     handleHarmonicChange(index, value);
   };
@@ -407,11 +418,12 @@ export default function Component() {
   };
 
   const handleListen = useCallback(async () => {
-    if (!isAudioReady) await handleInitialPress();
+    ensureAudio();
     if (isListening) return;
 
     try {
       setIsListening(true);
+      setMicError(null);
       gizmoRuntime.performHaptic('heavy');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const audioContext = Tone.getContext().rawContext;
@@ -471,11 +483,24 @@ export default function Component() {
     } catch (err) {
       console.error("Microphone access denied:", err);
       setIsListening(false);
+      setMicError((err as any)?.name === 'NotAllowedError'
+        ? 'Microphone blocked. Allow it in your browser\u2019s site settings, then try again.'
+        : 'No microphone available.');
     }
-  }, [isAudioReady, isListening, harmonics]);
+  }, [isListening, harmonics]);
+
+  useEffect(() => {
+    if (!isListening) setPressedButtons(p => ({ ...p, listen: false }));
+  }, [isListening]);
+
+  useEffect(() => {
+    if (!micError) return;
+    const timeout = setTimeout(() => setMicError(null), 5000);
+    return () => clearTimeout(timeout);
+  }, [micError]);
 
   const handlePianoPress = (note: string) => {
-    if (!isAudioReady) return;
+    ensureAudio();
     audioEngine.current.synth.triggerAttack(note);
     setActiveNotes(prev => [...prev, note]);
     if (hold) {
@@ -485,68 +510,131 @@ export default function Component() {
   };
 
   const handlePianoRelease = (note: string) => {
-    if (!isAudioReady) return;
+    if (!audioEngine.current.synth) return;
     if (hold) return; // Don't release if hold is active
     audioEngine.current.synth.triggerRelease(note);
     setActiveNotes(prev => prev.filter(n => n !== note));
   };
 
+  // Piano keys: pointer capture so a mouse released off the key still ends the note.
+  const pianoKeyProps = (note: string) => ({
+    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      handlePianoPress(note);
+      setPressedButtons(p => ({ ...p, [note]: true }));
+    },
+    onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+      if (!pressedButtons[note]) return;
+      handlePianoRelease(note);
+      setPressedButtons(p => ({ ...p, [note]: false }));
+    },
+    onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+      if (!pressedButtons[note]) return;
+      handlePianoRelease(note);
+      setPressedButtons(p => ({ ...p, [note]: false }));
+    },
+  });
+
+  // Round buttons act on press (like the original touchstart) and show the pressed shadow while held.
+  const pressProps = (key: string, action: () => void) => ({
+    onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      action();
+      setPressedButtons(p => ({ ...p, [key]: true }));
+    },
+    onPointerUp: () => setPressedButtons(p => ({ ...p, [key]: false })),
+    onPointerLeave: () => setPressedButtons(p => ({ ...p, [key]: false })),
+    onPointerCancel: () => setPressedButtons(p => ({ ...p, [key]: false })),
+  });
+
+  // Desktop: play from the computer keyboard (A W S E D F T G Y H U J = C..B, Z / X = octave).
+  const keyboardRef = useRef<any>({});
+  keyboardRef.current = { handlePianoPress, handlePianoRelease, changeOctave, octave };
+  useEffect(() => {
+    const keyMap = ['a', 'w', 's', 'e', 'd', 'f', 't', 'g', 'y', 'h', 'u', 'j'];
+    const down = new Map<string, string>();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      const { handlePianoPress, changeOctave, octave } = keyboardRef.current;
+      if (k === 'z') return changeOctave(-1);
+      if (k === 'x') return changeOctave(1);
+      const index = keyMap.indexOf(k);
+      if (index < 0 || down.has(k)) return;
+      const note = `${NOTES[index]}${octave}`;
+      down.set(k, note);
+      handlePianoPress(note);
+      setPressedButtons(p => ({ ...p, [note]: true }));
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      const note = down.get(k);
+      if (!note) return;
+      down.delete(k);
+      keyboardRef.current.handlePianoRelease(note);
+      setPressedButtons(p => ({ ...p, [note]: false }));
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
   useEffect(() => {
     if (!hold && heldNotes.length > 0) {
-      audioEngine.current.synth.triggerRelease(heldNotes);
+      audioEngine.current.synth?.triggerRelease(heldNotes);
       setActiveNotes(prev => prev.filter(n => !heldNotes.includes(n)));
       setHeldNotes([]);
     }
   }, [hold, heldNotes]);
 
-  if (!isAudioReady) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center" style={{ backgroundColor }}>
-        <div className="text-2xl font-bold" style={{ color: primaryColor }}>
-          Loading...
-        </div>
-      </div>
-    );
-  }
+  const roundButton = (pressed: boolean, depth = 4) => ({
+    borderRadius: '50%',
+    background: `linear-gradient(145deg, #f0f5fd, #caced4)`,
+    boxShadow: pressed
+      ? `inset ${depth}px ${depth}px ${depth * 2}px #a3b1c6, inset -${depth}px -${depth}px ${depth * 2}px #ffffff`
+      : `${depth}px ${depth}px ${depth * 2}px #a3b1c6, -${depth}px -${depth}px ${depth * 2}px #ffffff`,
+  });
+  // Small buttons keep their look but get an invisible 44px hit area.
+  const smallHit = "relative cursor-pointer before:absolute before:-inset-1.5";
 
   return (
-    <div className="h-screen w-screen flex flex-col font-sans" style={{ backgroundColor, color: '#555' }}>
+    <div
+      className="h-screen w-screen flex flex-col items-center font-sans overflow-hidden pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
+      style={{ backgroundColor, color: '#555' }}
+      onPointerDownCapture={ensureAudio}
+    >
+      <div className="w-full max-w-4xl h-full flex flex-col min-h-0">
       {/* Header */}
-      <header className="p-4 flex justify-between items-center">
+      <header className="p-4 pt-[max(1rem,env(safe-area-inset-top))] [@media(max-height:500px)]:py-2 flex justify-between items-center">
         <h1 className="text-xl font-bold" style={{ color: primaryColor }}>OVERTONE <span className="font-light text-base">harmonic synthesiser</span></h1>
         <div className="flex items-center gap-2">
           <button
-            onTouchStart={() => {
+            {...pressProps('adsr', () => {
               setShowAdsrEditor(s => !s);
-              setPressedButtons(p => ({ ...p, adsr: true }));
               gizmoRuntime.performHaptic('light');
-            }}
-            onTouchEnd={() => setPressedButtons(p => ({ ...p, adsr: false }))}
-            className={`p-3 transition-all duration-200`}
+            })}
+            title="Envelope (ADSR)"
+            className={`p-3 transition-all duration-200 cursor-pointer`}
             style={{
-              borderRadius: '50%',
-              background: `linear-gradient(145deg, #f0f5fd, #caced4)`,
-              boxShadow: pressedButtons.adsr || showAdsrEditor
-                ? 'inset 5px 5px 10px #a3b1c6, inset -5px -5px 10px #ffffff'
-                : '5px 5px 10px #a3b1c6, -5px -5px 10px #ffffff',
+              ...roundButton(!!pressedButtons.adsr || showAdsrEditor, 5),
               color: showAdsrEditor ? accentColor : primaryColor,
             }}
           >
             <SlidersHorizontal size={24} />
           </button>
           <button
-            onTouchStart={() => {
-              handleListen();
-              setPressedButtons(p => ({ ...p, listen: true }));
-            }}
-            onTouchEnd={() => setPressedButtons(p => ({ ...p, listen: false }))}
-            className={`p-3 transition-all duration-200`}
+            {...pressProps('listen', handleListen)}
+            title="Listen: copy the harmonics of a sound"
+            className={`p-3 transition-all duration-200 cursor-pointer`}
             style={{
-              borderRadius: '50%',
-              background: `linear-gradient(145deg, #f0f5fd, #caced4)`,
-              boxShadow: pressedButtons.listen
-                ? 'inset 5px 5px 10px #a3b1c6, inset -5px -5px 10px #ffffff'
-                : '5px 5px 10px #a3b1c6, -5px -5px 10px #ffffff',
+              ...roundButton(!!pressedButtons.listen, 5),
               color: isListening ? accentColor : primaryColor,
             }}
             disabled={isListening}
@@ -556,47 +644,45 @@ export default function Component() {
         </div>
       </header>
 
+      {micError && (
+        <div className="relative z-30 h-0 w-full flex justify-center pointer-events-none">
+          <div
+            className="absolute top-0 mx-4 px-4 py-2 rounded-xl text-sm text-center"
+            style={{ backgroundColor, boxShadow: '5px 5px 10px #a3b1c6, -5px -5px 10px #ffffff', color: accentColor }}
+          >
+            {micError}
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
-      <main className="flex-grow flex flex-col p-4 pt-0 gap-4 overflow-hidden">
+      <main className="flex-grow flex flex-col p-4 pt-0 gap-4 [@media(max-height:500px)]:gap-2 overflow-hidden min-h-0">
         {/* Waveform */}
-        <div className="w-full h-24 rounded-2xl p-1" style={{ boxShadow: 'inset 7px 7px 15px #a3b1c6, inset -7px -7px 15px #ffffff' }}>
+        <div className="w-full h-24 [@media(max-height:500px)]:h-14 [@media(min-width:768px)_and_(min-height:600px)]:h-32 flex-shrink-0 rounded-2xl p-1" style={{ boxShadow: 'inset 7px 7px 15px #a3b1c6, inset -7px -7px 15px #ffffff' }}>
           <canvas 
             ref={canvasRef} 
-            className="w-full h-full rounded-xl" 
-            width="375" 
-            height="88"
-            onTouchStart={handleAdsrTouchStart}
-            onTouchMove={handleAdsrTouchMove}
-            onTouchEnd={handleAdsrTouchEnd}
+            className={`block w-full h-full rounded-xl ${showAdsrEditor ? 'cursor-pointer' : ''}`}
+            onPointerDown={handleAdsrPointerDown}
+            onPointerMove={handleAdsrPointerMove}
+            onPointerUp={handleAdsrPointerUp}
+            onPointerCancel={handleAdsrPointerUp}
           />
         </div>
 
         {/* Harmonics Editor */}
-        <div className="flex-grow flex flex-col">
-          <div className="flex justify-between items-center mb-2 px-1">
+        <div className="flex-grow flex flex-col min-h-0">
+          <div className="flex justify-between items-center mb-2 [@media(max-height:500px)]:mb-1 px-1">
             <h2 className="font-bold">Harmonics ({harmonics.length})</h2>
             <div className="flex gap-2">
               <button
-                onTouchStart={() => { removeHarmonic(); setPressedButtons(p => ({ ...p, minus: true })); }}
-                onTouchEnd={() => setPressedButtons(p => ({ ...p, minus: false }))}
-                className="p-2"
-                style={{
-                  borderRadius: '50%',
-                  background: `linear-gradient(145deg, #f0f5fd, #caced4)`,
-                  boxShadow: pressedButtons.minus ? 'inset 4px 4px 8px #a3b1c6, inset -4px -4px 8px #ffffff' : '4px 4px 8px #a3b1c6, -4px -4px 8px #ffffff',
-                  color: primaryColor,
-                }}
+                {...pressProps('minus', removeHarmonic)}
+                className={`p-2 ${smallHit}`}
+                style={{ ...roundButton(!!pressedButtons.minus), color: primaryColor }}
               ><Minus size={16} /></button>
               <button
-                onTouchStart={() => { addHarmonic(); setPressedButtons(p => ({ ...p, plus: true })); }}
-                onTouchEnd={() => setPressedButtons(p => ({ ...p, plus: false }))}
-                className="p-2"
-                style={{
-                  borderRadius: '50%',
-                  background: `linear-gradient(145deg, #f0f5fd, #caced4)`,
-                  boxShadow: pressedButtons.plus ? 'inset 4px 4px 8px #a3b1c6, inset -4px -4px 8px #ffffff' : '4px 4px 8px #a3b1c6, -4px -4px 8px #ffffff',
-                  color: primaryColor,
-                }}
+                {...pressProps('plus', addHarmonic)}
+                className={`p-2 ${smallHit}`}
+                style={{ ...roundButton(!!pressedButtons.plus), color: primaryColor }}
               ><Plus size={16} /></button>
             </div>
           </div>
@@ -608,10 +694,10 @@ export default function Component() {
                 {harmonics.map((value, i) => (
                   <div key={i} className={`flex flex-col items-center gap-1 ${harmonics.length > 8 ? 'flex-shrink-0 w-8' : 'flex-1'}`}>
                     <div 
-                      className={`relative flex-grow rounded-full overflow-hidden ${harmonics.length > 8 ? 'w-5' : 'w-full'}`} 
-                      style={{ boxShadow: 'inset 3px 3px 6px #a3b1c6, inset -3px -3px 6px #ffffff', minHeight: '120px' }}
-                      onTouchStart={(e) => handleHarmonicTouch(e, i)}
-                      onTouchMove={(e) => handleHarmonicTouch(e, i)}
+                      className={`relative flex-grow rounded-full overflow-hidden touch-none cursor-ns-resize min-h-[120px] [@media(max-height:500px)]:min-h-[40px] ${harmonics.length > 8 ? 'w-5' : 'w-full'}`} 
+                      style={{ boxShadow: 'inset 3px 3px 6px #a3b1c6, inset -3px -3px 6px #ffffff' }}
+                      onPointerDown={(e) => handleHarmonicPointer(e, i)}
+                      onPointerMove={(e) => handleHarmonicPointer(e, i)}
                     >
                       <div
                         className="absolute bottom-0 w-full"
@@ -635,7 +721,7 @@ export default function Component() {
                         }}
                       />
                     </div>
-                    <span className="text-xs font-mono mt-1">{i + 1}</span>
+                    <span className="text-xs font-mono mt-1 [@media(max-height:500px)]:mt-0">{i + 1}</span>
                   </div>
                 ))}
               </div>
@@ -645,45 +731,33 @@ export default function Component() {
       </main>
 
       {/* Piano Roll */}
-      <footer className="h-36 w-full flex-shrink-0 flex flex-col px-2 pb-2">
+      <footer className="h-36 [@media(max-height:500px)]:h-28 [@media(min-width:768px)_and_(min-height:600px)]:h-48 w-full flex-shrink-0 flex flex-col px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <div className="flex justify-center items-center gap-4 mb-2">
           <div className="w-1/3 flex justify-start">
             {/* Placeholder for future left button */}
           </div>
           <div className="w-1/3 flex justify-center items-center gap-2">
             <button
-              onTouchStart={() => { changeOctave(-1); setPressedButtons(p => ({ ...p, octaveDown: true })); }}
-              onTouchEnd={() => setPressedButtons(p => ({ ...p, octaveDown: false }))}
-              className="p-2"
-              style={{
-                borderRadius: '50%',
-                background: `linear-gradient(145deg, #f0f5fd, #caced4)`,
-                boxShadow: pressedButtons.octaveDown ? 'inset 4px 4px 8px #a3b1c6, inset -4px -4px 8px #ffffff' : '4px 4px 8px #a3b1c6, -4px -4px 8px #ffffff',
-                color: primaryColor,
-              }}
+              {...pressProps('octaveDown', () => changeOctave(-1))}
+              title="Octave down (Z)"
+              className={`p-2 ${smallHit}`}
+              style={{ ...roundButton(!!pressedButtons.octaveDown), color: primaryColor }}
             ><ArrowDown size={16} /></button>
-            <span className="font-bold w-12 text-center">Oct {octave}</span>
+            <span className="font-bold w-12 text-center whitespace-nowrap">Oct {octave}</span>
             <button
-              onTouchStart={() => { changeOctave(1); setPressedButtons(p => ({ ...p, octaveUp: true })); }}
-              onTouchEnd={() => setPressedButtons(p => ({ ...p, octaveUp: false }))}
-              className="p-2"
-              style={{
-                borderRadius: '50%',
-                background: `linear-gradient(145deg, #f0f5fd, #caced4)`,
-                boxShadow: pressedButtons.octaveUp ? 'inset 4px 4px 8px #a3b1c6, inset -4px -4px 8px #ffffff' : '4px 4px 8px #a3b1c6, -4px -4px 8px #ffffff',
-                color: primaryColor,
-              }}
+              {...pressProps('octaveUp', () => changeOctave(1))}
+              title="Octave up (X)"
+              className={`p-2 ${smallHit}`}
+              style={{ ...roundButton(!!pressedButtons.octaveUp), color: primaryColor }}
             ><ArrowUp size={16} /></button>
           </div>
           <div className="w-1/3 flex justify-end">
             <button
-              onTouchStart={() => {
+              {...pressProps('hold', () => {
                 setHold(h => !h);
-                setPressedButtons(p => ({ ...p, hold: true }));
                 gizmoRuntime.performHaptic('medium');
-              }}
-              onTouchEnd={() => setPressedButtons(p => ({ ...p, hold: false }))}
-              className="p-2 px-4 rounded-full text-sm font-bold"
+              })}
+              className={`p-2 px-4 rounded-full text-sm font-bold ${smallHit}`}
               style={{
                 background: `linear-gradient(145deg, #f0f5fd, #caced4)`,
                 boxShadow: pressedButtons.hold || hold
@@ -697,7 +771,7 @@ export default function Component() {
           </div>
         </div>
         
-        <div className="flex-grow relative w-full h-full">
+        <div className="flex-grow relative w-full h-full touch-none">
           {/* White Keys */}
           <div className="absolute inset-0 flex">
             {['C', 'D', 'E', 'F', 'G', 'A', 'B'].map((noteName, index) => {
@@ -716,10 +790,8 @@ export default function Component() {
               return (
                 <div
                   key={note}
-                  onTouchStart={() => { handlePianoPress(note); setPressedButtons(p => ({ ...p, [note]: true })); }}
-                  onTouchEnd={() => { handlePianoRelease(note); setPressedButtons(p => ({ ...p, [note]: false })); }}
-                  onTouchCancel={() => { handlePianoRelease(note); setPressedButtons(p => ({ ...p, [note]: false })); }}
-                  className={`h-full flex items-end justify-center pb-2 font-mono text-xs transition-all duration-100 border-r border-b border-gray-400/50 ${borderRadiusClass}`}
+                  {...pianoKeyProps(note)}
+                  className={`h-full flex items-end justify-center pb-2 font-mono text-xs transition-all duration-100 border-r border-b border-gray-400/50 cursor-pointer ${borderRadiusClass}`}
                   style={{
                     width: `${keyWidth}%`,
                     background: pianoKeyColor,
@@ -749,10 +821,8 @@ export default function Component() {
               return (
                 <div
                   key={note}
-                  onTouchStart={(e) => { e.stopPropagation(); handlePianoPress(note); setPressedButtons(p => ({ ...p, [note]: true })); }}
-                  onTouchEnd={(e) => { e.stopPropagation(); handlePianoRelease(note); setPressedButtons(p => ({ ...p, [note]: false })); }}
-                  onTouchCancel={(e) => { e.stopPropagation(); handlePianoRelease(note); setPressedButtons(p => ({ ...p, [note]: false })); }}
-                  className="absolute top-0 h-[60%] flex items-end justify-center pb-1 font-mono text-xs transition-all duration-100 rounded-b-md z-10 pointer-events-auto"
+                  {...pianoKeyProps(note)}
+                  className="absolute top-0 h-[60%] flex items-end justify-center pb-1 font-mono text-xs transition-all duration-100 rounded-b-md z-10 pointer-events-auto cursor-pointer"
                   style={{
                     left: `${leftPosition}%`,
                     width: `${blackKeyWidth}%`,
@@ -762,13 +832,14 @@ export default function Component() {
                     borderBottom: `2px solid ${isActive ? accentColor : 'transparent'}`,
                   }}
                 >
-                  {noteName.replace('#', 'â™¯')}
+                  {noteName.replace('#', '\u266F')}
                 </div>
               );
             })}
           </div>
         </div>
       </footer>
+      </div>
     </div>
   );
 }

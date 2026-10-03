@@ -65,6 +65,8 @@ export default function Component() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number>();
   const sliderRef = useRef<HTMLDivElement>(null);
+  const canvasSize = useRef({ width: 1024, height: 500, dpr: 1 });
+  const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 
   const sliderToFreq = useCallback((sliderVal: number) => {
     if (maxFreq <= minFreq) return minFreq;
@@ -93,27 +95,29 @@ export default function Component() {
     return () => clearTimeout(infoTimeout);
   }, [frequency]);
 
+  // Audio may only start from a user gesture: the oscillator is created on the first press.
+  // Returns true if this press started it.
+  const startAudio = () => {
+    if (audioNodes.current) return false;
+    try {
+      Tone.start();
+      const osc = new Tone.Oscillator({
+        type: WAVE_TYPES[waveTypeIndex],
+        frequency: 440,
+      }).toDestination();
+      const analyser = new Tone.Analyser('waveform', 1024);
+      osc.connect(analyser);
+      osc.start();
+      audioNodes.current = { osc, analyser };
+      setIsStarted(true);
+      gizmoRuntime.performHaptic('light');
+    } catch (error) {
+      console.error("Error creating audio nodes:", error);
+    }
+    return true;
+  };
+
   useEffect(() => {
-    const initAudio = async () => {
-      try {
-        await Tone.start();
-        const osc = new Tone.Oscillator({
-          type: WAVE_TYPES[waveTypeIndex],
-          frequency: 440,
-        }).toDestination();
-        const analyser = new Tone.Analyser('waveform', 1024);
-        osc.connect(analyser);
-        osc.start();
-        audioNodes.current = { osc, analyser };
-        setIsStarted(true);
-        gizmoRuntime.performHaptic('light');
-      } catch (error) {
-        console.error("Error creating audio nodes:", error);
-      }
-    };
-
-    initAudio();
-
     return () => {
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
@@ -122,6 +126,21 @@ export default function Component() {
       audioNodes.current?.osc.dispose();
       audioNodes.current?.analyser.dispose();
     };
+  }, []);
+
+  // Canvas follows its box and draws at devicePixelRatio.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const observer = new ResizeObserver(() => {
+      const { width, height } = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(1, Math.round(width * dpr));
+      canvas.height = Math.max(1, Math.round(height * dpr));
+      canvasSize.current = { width, height, dpr };
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -147,14 +166,15 @@ export default function Component() {
     if (!context) return;
 
     const values = analyser.getValue();
-    const { width, height } = canvas;
-    
+    const { width, height, dpr } = canvasSize.current;
+
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
     context.clearRect(0, 0, width, height);
     context.beginPath();
     context.lineWidth = lineWidth;
     context.strokeStyle = mainColor;
     context.shadowColor = mainColor;
-    context.shadowBlur = glowStrength;
+    context.shadowBlur = glowStrength * dpr; // shadowBlur ignores the transform
     const scaleFactor = 0.8; // Decrease scale slightly
 
     for (let i = 0; i < values.length; i++) {
@@ -194,15 +214,20 @@ export default function Component() {
     setFrequency(sliderToFreq(sliderVal));
   };
 
-  const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    handleSliderMove(e.touches[0].clientX);
+  const onSliderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    startAudio();
+    handleSliderMove(e.clientX);
   };
 
-  const onTouchStartSlider = (e: React.TouchEvent<HTMLDivElement>) => {
-    handleSliderMove(e.touches[0].clientX);
+  const onSliderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) handleSliderMove(e.clientX);
   };
 
-  const handleCanvasTap = () => {
+  const handleCanvasTap = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (startAudio()) return; // the first tap just turns the sound on
     setWaveTypeIndex((prevIndex) => (prevIndex + 1) % WAVE_TYPES.length);
     gizmoRuntime.performHaptic('light');
   };
@@ -215,61 +240,68 @@ export default function Component() {
         className="h-screen w-screen flex flex-col items-center justify-center text-white select-none"
         style={{ fontFamily: '"Space Mono", monospace' }}
       >
-        {isStarted && (
-          <div className="relative w-full h-full">
-            <div
-              className="absolute inset-0 flex items-center justify-center overflow-hidden"
-              onTouchStart={handleCanvasTap}
-            >
-              <canvas ref={canvasRef} className="w-full h-[90vh] absolute top-0" width="1024" height="500" />
-            </div>
+        <div className="w-full h-full flex flex-col">
+          <div
+            className="relative flex-[9_1_0%] min-h-0 overflow-hidden cursor-pointer"
+            onPointerDown={handleCanvasTap}
+          >
+            <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
-            {activeInfo && (
-              <div 
-                className="absolute bottom-[10vh] left-0 right-0 p-3 max-w-xs mx-auto text-center z-30 pointer-events-none"
-                style={{ color: textColor }}
-              >
-                <p className="font-bold text-lg" style={{ color: mainColor, textShadow: `0 0 ${glowStrength}px ${mainColor}` }}>{activeInfo.label}</p>
-                <p className="text-sm">{activeInfo.description}</p>
+            {!isStarted && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <p className="text-sm md:text-base uppercase tracking-widest opacity-70" style={{ color: textColor }}>
+                  {isCoarse ? 'Tap' : 'Click'} to start
+                </p>
               </div>
             )}
 
-            <div
-              className="w-full h-[10vh] absolute bottom-0 left-0 right-0 z-20"
-              onTouchStart={onTouchStartSlider}
-              onTouchMove={onTouchMove}
-            >
-              <div ref={sliderRef} className="w-full h-full cursor-pointer relative" style={{ backgroundColor: backgroundColor }}>
-                {INTERESTING_FREQUENCIES.map((point) => {
-                  const pos = freqToSlider(point.freq);
-                  if (pos >= MIN_SLIDER && pos <= MAX_SLIDER) {
-                    return (
-                      <div
-                        key={point.freq}
-                        className="absolute top-0 bottom-0 w-px"
-                        style={{
-                          left: `${(pos / MAX_SLIDER) * 100}%`,
-                          backgroundColor: mainColor,
-                          opacity: 0.3,
-                          boxShadow: `0 0 ${glowStrength}px ${mainColor}`,
-                        }}
-                      />
-                    );
-                  }
-                  return null;
-                })}
-                <div
-                  className="h-full"
-                  style={{
-                    width: `${(freqToSlider(frequency) / MAX_SLIDER) * 100}%`,
-                    backgroundColor: mainColor,
-                    boxShadow: `0 0 ${glowStrength}px ${mainColor}`,
-                  }}
-                />
+            {activeInfo && (
+              <div 
+                className="absolute bottom-0 left-0 right-0 p-3 max-w-xs md:max-w-md mx-auto text-center z-30 pointer-events-none"
+                style={{ color: textColor }}
+              >
+                <p className="font-bold text-lg md:text-2xl" style={{ color: mainColor, textShadow: `0 0 ${glowStrength}px ${mainColor}` }}>{activeInfo.label}</p>
+                <p className="text-sm md:text-base">{activeInfo.description}</p>
               </div>
+            )}
+          </div>
+
+          <div
+            className="w-full flex-[1_1_0%] min-h-[calc(48px_+_env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] z-20 touch-none"
+            style={{ backgroundColor }}
+            onPointerDown={onSliderPointerDown}
+            onPointerMove={onSliderPointerMove}
+          >
+            <div ref={sliderRef} className="w-full h-full cursor-pointer relative" style={{ backgroundColor: backgroundColor }}>
+              {INTERESTING_FREQUENCIES.map((point) => {
+                const pos = freqToSlider(point.freq);
+                if (pos >= MIN_SLIDER && pos <= MAX_SLIDER) {
+                  return (
+                    <div
+                      key={point.freq}
+                      className="absolute top-0 bottom-0 w-px"
+                      style={{
+                        left: `${(pos / MAX_SLIDER) * 100}%`,
+                        backgroundColor: mainColor,
+                        opacity: 0.3,
+                        boxShadow: `0 0 ${glowStrength}px ${mainColor}`,
+                      }}
+                    />
+                  );
+                }
+                return null;
+              })}
+              <div
+                className="h-full"
+                style={{
+                  width: `${(freqToSlider(frequency) / MAX_SLIDER) * 100}%`,
+                  backgroundColor: mainColor,
+                  boxShadow: `0 0 ${glowStrength}px ${mainColor}`,
+                }}
+              />
             </div>
           </div>
-        )}
+        </div>
       </div>
     </>
   );

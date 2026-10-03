@@ -1,6 +1,7 @@
 import React, { useRef, useMemo, useEffect, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import FitFov from './FitFov.js';
 
 const DEFAULTS = {
   hairBaseColor: "#000000",
@@ -182,48 +183,38 @@ function FluffySphere() {
   useEffect(() => {
     const canvas = gl.domElement;
 
-    const onMouseDown = (e) => {
+    // Pointer events cover mouse, touch and pen; capture keeps the drag going off-canvas.
+    const onPointerDown = (e) => {
+      if (!e.isPrimary) return;
+      canvas.setPointerCapture(e.pointerId);
+      canvas.style.cursor = 'grabbing';
       isDragging.current = true;
       lastTouch.current = { x: e.clientX, y: e.clientY };
     };
-    const onMouseMove = (e) => {
-      if (!isDragging.current) return;
+    const onPointerMove = (e) => {
+      if (!isDragging.current || !e.isPrimary) return;
       const dx = e.clientX - lastTouch.current.x;
       const dy = e.clientY - lastTouch.current.y;
       rotationVelocity.current.y = dx * 0.01;
       rotationVelocity.current.x = dy * 0.01;
       lastTouch.current = { x: e.clientX, y: e.clientY };
     };
-    const onMouseUp = () => { isDragging.current = false; };
-
-    const onTouchStart = (e) => {
-      isDragging.current = true;
-      lastTouch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    const onPointerUp = (e) => {
+      if (!e.isPrimary) return;
+      canvas.style.cursor = 'grab';
+      isDragging.current = false;
     };
-    const onTouchMove = (e) => {
-      if (!isDragging.current) return;
-      const touch = e.touches[0];
-      const dx = touch.clientX - lastTouch.current.x;
-      const dy = touch.clientY - lastTouch.current.y;
-      rotationVelocity.current.y = dx * 0.01;
-      rotationVelocity.current.x = dy * 0.01;
-      lastTouch.current = { x: touch.clientX, y: touch.clientY };
-    };
-    const onTouchEnd = () => { isDragging.current = false; };
 
-    canvas.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-    canvas.addEventListener('touchend', onTouchEnd);
+    canvas.style.cursor = 'grab';
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerUp);
     return () => {
-      canvas.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-      canvas.removeEventListener('touchstart', onTouchStart);
-      canvas.removeEventListener('touchmove', onTouchMove);
-      canvas.removeEventListener('touchend', onTouchEnd);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointercancel', onPointerUp);
     };
   }, [gl]);
 
@@ -418,8 +409,9 @@ function Scene() {
           }}
         />
       )}
-      <Canvas shadows camera={{ position: [0, 0, cameraDistance], fov: 45 }} gl={{ alpha: true }}>
+      <Canvas dpr={[1, 2]} shadows camera={{ position: [0, 0, cameraDistance], fov: 45 }} gl={{ alpha: true }}>
         <CameraUpdater distance={cameraDistance} />
+        <FitFov fov={45} minAspect={0.78} />
         <ambientLight intensity={0.6} />
         <pointLight position={[10, 10, 10]} intensity={1.5} castShadow />
         <spotLight position={[-10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
@@ -433,7 +425,7 @@ function Scene() {
 
 export default function Component() {
   return (
-    <div style={{ height: '100vh', width: '100vw', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <div style={{ flex: 1, width: '100%', position: 'relative', minHeight: 0 }}>
         <Scene />
       </div>

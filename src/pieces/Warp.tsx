@@ -30,6 +30,11 @@ const Starfield = ({ speed, starCount, starColor, maxSpeed }: { speed: number; s
     speedRef.current = speed;
   }, [speed]);
 
+  // The field is simulated in the ~390px-wide space it was designed for and
+  // projected up to the real canvas, so it looks the same on any screen size.
+  const REF_WIDTH = 390;
+  const sizeRef = useRef({ width: REF_WIDTH, height: 844, scale: 1, dpr: 1 });
+
   const initStars = useCallback((width: number, height: number) => {
     const newStars: Star[] = [];
     for (let i = 0; i < starCount; i++) {
@@ -42,28 +47,44 @@ const Starfield = ({ speed, starCount, starColor, maxSpeed }: { speed: number; s
     starsRef.current = newStars;
   }, [starCount]);
 
+  // Canvas follows its box at devicePixelRatio.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const { width, height } = canvas.getBoundingClientRect();
-    initStars(width, height);
-  }, [starCount, initStars]);
+    const resize = () => {
+      const { width, height } = canvas.getBoundingClientRect();
+      if (!width || !height) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      const prev = sizeRef.current;
+      const scale = width / REF_WIDTH;
+      sizeRef.current = { width, height, scale, dpr };
+      if (Math.abs(prev.height / prev.scale - height / scale) > 1) initStars(REF_WIDTH, height / scale);
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
+    resize();
+    return () => observer.disconnect();
+  }, [initStars]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!ctx || !canvas) return;
 
-    const { width, height } = canvas.getBoundingClientRect();
-    canvas.width = width;
-    canvas.height = height;
-    
-    initStars(width, height);
+    initStars(REF_WIDTH, sizeRef.current.height / sizeRef.current.scale);
 
     const draw = () => {
-      ctx.clearRect(0, 0, width, height);
+      const { width: viewWidth, height: viewHeight, scale, dpr } = sizeRef.current;
+      // Simulation space: REF_WIDTH wide, aspect-matched height.
+      const width = REF_WIDTH;
+      const height = viewHeight / scale;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, viewWidth, viewHeight);
       ctx.save();
-      ctx.translate(width / 2, height / 2);
+      ctx.translate(viewWidth / 2, viewHeight / 2);
 
       const currentSpeed = speedRef.current * maxSpeed;
 
@@ -75,7 +96,7 @@ const Starfield = ({ speed, starCount, starColor, maxSpeed }: { speed: number; s
           star.z = width;
         }
 
-        const k = 128 / star.z;
+        const k = (128 / star.z) * scale;
         const px = star.x * k;
         const py = star.y * k;
 
@@ -86,7 +107,7 @@ const Starfield = ({ speed, starCount, starColor, maxSpeed }: { speed: number; s
         
         if (speedRef.current > 0.1) {
             const pz = star.z + currentSpeed * 2;
-            const prev_k = 128 / pz;
+            const prev_k = (128 / pz) * scale;
             const prev_px = star.x * prev_k;
             const prev_py = star.y * prev_k;
             
@@ -142,37 +163,44 @@ const SpeedSlider = ({ speed, onSpeedChange, sliderColor, sliderBgColor }: { spe
     onSpeedChange(value);
   }, [onSpeedChange]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
     isDraggingRef.current = true;
-    updateSpeed(e.touches[0].clientX);
+    updateSpeed(e.clientX);
     gizmoRuntime.performHaptic('light');
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isDraggingRef.current) {
-      updateSpeed(e.touches[0].clientX);
+      updateSpeed(e.clientX);
     }
   };
 
-  const handleTouchEnd = () => {
+  const handlePointerUp = () => {
     isDraggingRef.current = false;
   };
 
+  // The visible bar stays 8px tall; the padded wrapper gives a comfortable hit area.
   return (
     <div
-      ref={sliderRef}
-      className="absolute bottom-10 left-[10%] w-[80%] h-2 rounded-full"
-      style={{ backgroundColor: sliderBgColor }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
+      className="absolute bottom-[calc(max(2.5rem,env(safe-area-inset-bottom)_+_1rem)_-_1.25rem)] left-[10%] w-[80%] py-5 cursor-pointer touch-none"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
       <div
-        ref={fillRef}
-        className="h-full rounded-full"
-        style={{ backgroundColor: sliderColor }}
-      />
+        ref={sliderRef}
+        className="h-2 rounded-full"
+        style={{ backgroundColor: sliderBgColor }}
+      >
+        <div
+          ref={fillRef}
+          className="h-full rounded-full"
+          style={{ backgroundColor: sliderColor }}
+        />
+      </div>
     </div>
   );
 };
@@ -193,29 +221,13 @@ export default function Component() {
   const sliderColor = tweaks.sliderColor.useState();
   const sliderBgColor = tweaks.sliderBgColor.useState();
 
-  useEffect(() => {
-    const initAudio = async () => {
-      await Tone.start();
-      setIsAudioReady(true);
-      
-      // Set initial audio levels based on starting speed
-      const { engineVolume, engineHum } = audioNodes.current;
-      if (engineVolume && engineHum) {
-        const now = Tone.now();
-        const initialSpeed = 0.5;
-        const targetVolume = Tone.gainToDb(initialSpeed * 0.8) - 25;
-        engineVolume.volume.rampTo(targetVolume, 0.1, now);
-        engineHum.frequency.rampTo(50 + initialSpeed * 150, 0.2, now);
-      }
-    };
-    
-    // Only initialize audio if it hasn't been done yet.
-    if (!isAudioReady) {
-        initAudio();
-    }
-  }, [isAudioReady]); // Run when isAudioReady changes, but logic prevents re-runs.
+  const speedRef = useRef(speed);
+  speedRef.current = speed;
 
-  useEffect(() => {
+  // Audio may only start from a user gesture: the engine is built and Tone started on the first press.
+  const initAudio = () => {
+    if (audioNodes.current.engineHum) return;
+    Tone.start();
     const engineHum = new Tone.Oscillator({
         type: "sine",
         frequency: 50,
@@ -225,11 +237,23 @@ export default function Component() {
     engineHum.connect(engineVolume);
 
     audioNodes.current = { engineHum, engineVolume };
+    setIsAudioReady(true);
 
+    // Set initial audio levels based on the current speed
+    const now = Tone.now();
+    const initialSpeed = speedRef.current;
+    if (initialSpeed > 0.01) {
+      const targetVolume = Tone.gainToDb(initialSpeed * 0.8) - 25;
+      engineVolume.volume.rampTo(targetVolume, 0.1, now);
+      engineHum.frequency.rampTo(50 + initialSpeed * 150, 0.2, now);
+    }
+  };
+
+  useEffect(() => {
     return () => {
-      engineHum.dispose();
-      engineVolume.dispose();
-      filter.dispose();
+      audioNodes.current.engineHum?.dispose();
+      audioNodes.current.engineVolume?.dispose();
+      Tone.Destination.volume.value = 0; // don't leave the shared output muted for other pieces
     };
   }, []);
 
@@ -241,7 +265,7 @@ export default function Component() {
 
   const handleSpeedChange = useCallback((newSpeed: number) => {
     setSpeed(newSpeed);
-    if (!isAudioReady) return;
+    if (!audioNodes.current.engineHum) return;
 
     const { engineVolume, engineHum } = audioNodes.current;
     if (engineVolume && engineHum) {
@@ -262,7 +286,7 @@ export default function Component() {
         gizmoRuntime.performHaptic(hapticStyle);
         lastHapticTime.current = currentTime;
     }
-  }, [isAudioReady]);
+  }, []);
 
   const toggleMute = () => {
     setIsMuted(prev => !prev);
@@ -272,11 +296,11 @@ export default function Component() {
   return (
     <>
       <div aria-hidden className="fixed inset-0 -z-10" style={{ background: backgroundColor }} />
-      <div className="h-screen w-screen overflow-hidden">
+      <div className="h-screen w-screen overflow-hidden" onPointerDownCapture={initAudio}>
         <Starfield speed={speed} starCount={starCount} starColor={starColor} maxSpeed={maxSpeed} />
 
-        <div className="absolute top-5 right-5">
-          <button onClick={toggleMute} style={{ color: hudColor }}>
+        <div className="absolute top-[max(1.25rem,env(safe-area-inset-top))] right-[max(1.25rem,env(safe-area-inset-right))]">
+          <button onClick={toggleMute} className="block p-2.5 -m-2.5 cursor-pointer transition-opacity [@media(hover:hover)]:hover:opacity-70" style={{ color: hudColor }} aria-label={isMuted ? 'Unmute' : 'Mute'}>
             {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
           </button>
         </div>

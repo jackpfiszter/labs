@@ -2,6 +2,7 @@ import React, { useRef, useMemo, Suspense, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
+import FitFov from './FitFov.js';
 // Optimized CRT Shader: Combined effects into a single pass with minimal branching
 const CRT_VERTEX_SHADER = `
   varying vec2 vUv;
@@ -503,6 +504,7 @@ const Scene = ({ magnetStrength, magnetSize, scanlineIntensity, chromaticAberrat
     <>
       <BackgroundGradient animationSpeed={animationSpeed} />
       <PerspectiveCamera makeDefault position={[0, 0, cameraDistance]} fov={40} />
+      <FitFov fov={40} minAspect={0.68} />
       <OrbitControls 
         enablePan={false} 
         enableZoom={false}
@@ -544,7 +546,7 @@ export default function Component() {
   const bloomIntensity = 0.6;
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', touchAction: 'none', userSelect: 'none', background: '#000' }}>
+    <div style={{ width: '100%', height: '100%', overflow: 'hidden', touchAction: 'none', userSelect: 'none', background: '#000', cursor: 'grab' }}>
       <Canvas
         style={{ width: '100%', height: '100%' }}
         shadows={false}

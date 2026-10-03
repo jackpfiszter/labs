@@ -2,6 +2,7 @@ import React, { useRef, useState, useMemo, Suspense, useEffect } from 'react';
 import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import * as Tone from 'tone';
+import FitFov from './FitFov.js';
 
 const generativeBackgroundShader = {
   uniforms: {
@@ -254,6 +255,8 @@ function PhysicsScene({ sphereOpacity, sphereRefraction, sphereShininess, bounci
     }
   };
 
+  // Called from pointerdown and pointerup: mobile browsers only count the touch's
+  // pointerup as a user gesture for unlocking audio, desktop counts the mousedown.
   const startAudio = async () => {
     if (!audioReady) {
       await Tone.start();
@@ -282,7 +285,8 @@ function PhysicsScene({ sphereOpacity, sphereRefraction, sphereShininess, bounci
     glassUniforms.uColor3.value.set(bgColor3);
     glassUniforms.uScale.value = bgScale;
     glassUniforms.uTime.value = state.clock.getElapsedTime() * bgSpeed;
-    glassUniforms.uResolution.value.set(size.width, size.height);
+    // gl_FragCoord is in device pixels, so match the canvas's pixel ratio.
+    glassUniforms.uResolution.value.set(size.width * state.viewport.dpr, size.height * state.viewport.dpr);
   });
 
   // Physics state for all balls
@@ -312,9 +316,11 @@ function PhysicsScene({ sphereOpacity, sphereRefraction, sphereShininess, bounci
   const isDragging = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
 
-  const { size } = useThree();
+  const { size, gl } = useThree();
 
   const handlePointerDown = (e) => {
+    e.target.setPointerCapture?.(e.pointerId);
+    gl.domElement.style.cursor = 'grabbing';
     isDragging.current = true;
     lastMouse.current = { x: e.clientX, y: e.clientY };
   };
@@ -331,6 +337,7 @@ function PhysicsScene({ sphereOpacity, sphereRefraction, sphereShininess, bounci
   };
 
   const handlePointerUp = () => {
+    gl.domElement.style.cursor = '';
     isDragging.current = false;
   };
 
@@ -463,7 +470,11 @@ function PhysicsScene({ sphereOpacity, sphereRefraction, sphereShininess, bounci
           startAudio();
         }}
         onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
+        onPointerUp={(e) => {
+          handlePointerUp(e);
+          startAudio();
+        }}
+        onPointerCancel={handlePointerUp}
         onPointerLeave={handlePointerUp}
         visible={false}
       >
@@ -578,12 +589,14 @@ export default function Component() {
   ], [color1, color2, color3, color4, color5, color6]);
 
   return (
-    <div style={{ width: '100%', height: '100%', background: '#000', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', background: '#000', overflow: 'hidden', position: 'relative', cursor: 'grab' }}>
       <Canvas
+        dpr={[1, 2]}
         shadows
         camera={{ position: [0, 0, 15], fov: 45 }}
         gl={{ antialias: true }}
       >
+        <FitFov fov={45} minAspect={0.62} />
         <ambientLight intensity={0.8} />
         <pointLight position={[10, 10, 10]} intensity={3.5} />
         <pointLight position={[-10, 5, 5]} intensity={2.0} color="#ffffff" />

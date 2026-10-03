@@ -41,6 +41,8 @@ export default function Component() {
   const [colorOffset, setColorOffset] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [paletteIndex, setPaletteIndex] = useState(0);
+  const [loadedImage, setLoadedImage] = useState<HTMLImageElement | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   
   const pixelSize = tweaks.pixelSize.useState();
   const cycleSpeed = tweaks.cycleSpeed.useState();
@@ -72,8 +74,13 @@ export default function Component() {
     if (!ctx || !sourceCtx) return;
 
     const { width: screenWidth, height: screenHeight } = canvas.getBoundingClientRect();
-    canvas.width = screenWidth;
-    canvas.height = screenHeight;
+    if (!screenWidth || !screenHeight) return;
+    // Backing store at devicePixelRatio (capped) so the pixel blocks stay crisp
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const targetW = Math.round(screenWidth * dpr);
+    const targetH = Math.round(screenHeight * dpr);
+    if (canvas.width !== targetW) canvas.width = targetW;
+    if (canvas.height !== targetH) canvas.height = targetH;
 
     // Calculate dimensions to cover the entire canvas
     const imgAspectRatio = source.width / source.height;
@@ -148,17 +155,37 @@ export default function Component() {
     tempCtx.putImageData(imageData, 0, 0);
 
     // Draw final result
-    ctx.clearRect(0, 0, screenWidth, screenHeight);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(tempCanvas, 0, 0, screenWidth, screenHeight); // Draw tempCanvas to fill the main canvas
+    ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height); // Draw tempCanvas to fill the main canvas
   }, [pixelSize, colorOffset]);
 
+  // Load the image once per selection (not every frame)
   useEffect(() => {
+    if (!selectedImage) return;
+    let cancelled = false;
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => pixelateImage(img, currentPalette);
-    img.src = selectedImage || '';
-  }, [selectedImage, pixelateImage, currentPalette]);
+    img.onload = () => { if (!cancelled) setLoadedImage(img); };
+    img.src = selectedImage;
+    return () => { cancelled = true; };
+  }, [selectedImage]);
+
+  // Follow the container size (resize / orientation change / iframe)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ro = new ResizeObserver(() => {
+      const { width, height } = canvas.getBoundingClientRect();
+      setCanvasSize({ width, height });
+    });
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (loadedImage) pixelateImage(loadedImage, currentPalette);
+  }, [loadedImage, pixelateImage, currentPalette, canvasSize]);
 
   useEffect(() => {
     const animate = () => {
@@ -169,17 +196,31 @@ export default function Component() {
     return () => animationRef.current && cancelAnimationFrame(animationRef.current);
   }, [cycleSpeed]);
 
-  const handleTap = () => {
+  const handleTap = useCallback(() => {
     setPaletteIndex((prevIndex) => (prevIndex + 1) % PALETTES.length);
     if (enableSound) {
       gizmoRuntime.performHaptic('light');
     }
-  };
+  }, [enableSound]);
+
+  // Keyboard: Space / Enter cycles the palette
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT')) return;
+      if ((e.code === 'Space' || e.key === 'Enter') && !e.repeat) {
+        e.preventDefault();
+        handleTap();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleTap]);
 
   return (
     <>
       <div aria-hidden className="fixed inset-0 -z-10" style={{ background: backgroundColor }} />
-      <div className="h-screen w-screen flex items-center justify-center" onClick={handleTap}>
+      <div className="relative h-screen w-screen flex items-center justify-center cursor-pointer" onClick={handleTap}>
         <canvas
           ref={canvasRef}
           className="w-full h-full"
@@ -187,14 +228,16 @@ export default function Component() {
         />
         <canvas ref={sourceCanvasRef} className="hidden" />
 
-        <div className="absolute bottom-4 left-4">
+        <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))]">
           <button
             onClick={(e) => {
               e.stopPropagation();
               fileInputRef.current?.click();
             }}
             className="w-16 h-16 rounded-lg flex items-center justify-center
-                       bg-white text-black shadow-lg touch-manipulation"
+                       bg-white text-black shadow-lg touch-manipulation cursor-pointer
+                       transition-transform [@media(hover:hover)]:hover:scale-105 active:scale-95"
+            aria-label="Upload image"
           >
             {isUploading ? '...' : <Upload size={24} />}
           </button>

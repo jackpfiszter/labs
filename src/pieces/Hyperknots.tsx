@@ -1,5 +1,5 @@
 import React, { useRef, useMemo, Suspense, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { gizmoRuntime } from '@gizmo/runtime';
 import { OrbitControls, Float, PerspectiveCamera } from '@react-three/drei';
@@ -203,13 +203,27 @@ function Scene({ knotP, knotQ }) {
   const motionRef = useRef({ roll: 0, pitch: 0 });
 
   useEffect(() => {
+    let hasGyro = false;
     const removeListener = gizmoRuntime.addMotionListener((event) => {
+      hasGyro = true;
       motionRef.current = {
         roll: event.attitude.roll,
         pitch: event.attitude.pitch
       };
     });
-    return () => removeListener();
+    // Desktop fallback: mouse position stands in for device tilt (never overrides a real gyro)
+    const onPointerMove = (e: PointerEvent) => {
+      if (hasGyro || e.pointerType !== 'mouse') return;
+      motionRef.current = {
+        roll: ((e.clientX / window.innerWidth) * 2 - 1) * 0.6,
+        pitch: ((e.clientY / window.innerHeight) * 2 - 1) * 0.6
+      };
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    return () => {
+      removeListener();
+      window.removeEventListener('pointermove', onPointerMove);
+    };
   }, []);
 
   useFrame(() => {
@@ -274,6 +288,27 @@ function Scene({ knotP, knotQ }) {
   );
 }
 
+// Keep the knot framed on tall screens: widen the vertical fov so the horizontal view never
+// gets narrower than the knot (landscape keeps the original 50deg).
+const BASE_FOV = 50;
+const MIN_HALF_WIDTH_TAN = 0.42;
+
+function ResponsiveCamera() {
+  const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera;
+  const width = useThree((state) => state.size.width);
+  const height = useThree((state) => state.size.height);
+  useEffect(() => {
+    const aspect = width / Math.max(1, height);
+    const tanHalf = Math.max(Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)), MIN_HALF_WIDTH_TAN / aspect);
+    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(tanHalf));
+    camera.updateProjectionMatrix();
+  }, [camera, width, height]);
+  return null;
+}
+
+const isCoarsePointer = () =>
+  typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+
 export default function Component() {
   const backgroundColor = tweaks.backgroundColor.useState();
   const showLabels = tweaks.showLabels.useState();
@@ -304,24 +339,35 @@ export default function Component() {
   }, [knotQ]);
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative" style={{ background: backgroundColor }}>
+    <div className="h-screen w-screen overflow-hidden relative cursor-grab active:cursor-grabbing" style={{ background: backgroundColor }}>
       <Canvas
         shadows
         gl={{ antialias: true, alpha: true }}
         dpr={[1, 2]}
       >
-        <PerspectiveCamera makeDefault position={[0, 0, 7]} fov={50} />
+        <PerspectiveCamera makeDefault position={[0, 0, 7]} fov={BASE_FOV} />
+        <ResponsiveCamera />
         <Scene knotP={knotPValue} knotQ={knotQValue} />
       </Canvas>
 
       {/* Simple UI Sliders */}
-      <div className="absolute bottom-12 left-12 right-12 flex flex-col gap-6 pointer-events-auto">
+      {/* Each bar sits in a 44px-tall hit area so it is easy to grab on touch */}
+      <div
+        className="absolute mx-auto max-w-2xl flex flex-col gap-0 pointer-events-auto cursor-default"
+        style={{
+          bottom: 'max(1.875rem, calc(env(safe-area-inset-bottom) + 0.5rem))',
+          left: 'max(3rem, calc(env(safe-area-inset-left) + 1rem))',
+          right: 'max(3rem, calc(env(safe-area-inset-right) + 1rem))',
+        }}
+      >
         {loopsVisible && (
-          <div className="relative w-full h-2 bg-black border border-white/20 rounded-full overflow-hidden">
-            <div 
-              className="absolute top-0 left-0 h-full bg-white rounded-full transition-all duration-75"
-              style={{ width: `${((knotPValue - 1) / 19) * 100}%` }}
-            />
+          <div className="group relative w-full h-11 flex items-center">
+            <div className="relative w-full h-2 bg-black border border-white/20 group-hover:border-white/40 rounded-full overflow-hidden transition-colors">
+              <div 
+                className="absolute top-0 left-0 h-full bg-white rounded-full transition-all duration-75"
+                style={{ width: `${((knotPValue - 1) / 19) * 100}%` }}
+              />
+            </div>
             <input 
               type="range" 
               min="1" 
@@ -339,11 +385,13 @@ export default function Component() {
         )}
 
         {twistsVisible && (
-          <div className="relative w-full h-2 bg-black border border-white/20 rounded-full overflow-hidden">
-            <div 
-              className="absolute top-0 left-0 h-full bg-white rounded-full transition-all duration-75"
-              style={{ width: `${((knotQValue - 1) / 19) * 100}%` }}
-            />
+          <div className="group relative w-full h-11 flex items-center">
+            <div className="relative w-full h-2 bg-black border border-white/20 group-hover:border-white/40 rounded-full overflow-hidden transition-colors">
+              <div 
+                className="absolute top-0 left-0 h-full bg-white rounded-full transition-all duration-75"
+                style={{ width: `${((knotQValue - 1) / 19) * 100}%` }}
+              />
+            </div>
             <input 
               type="range" 
               min="1" 
@@ -373,7 +421,9 @@ export default function Component() {
           <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center pointer-events-none select-none gap-2">
             <div className="bg-black/40 backdrop-blur-xl px-6 py-3 rounded-full border border-white/20 shadow-2xl">
               <p className="text-white/90 text-[10px] font-bold tracking-[0.2em] uppercase">
-                Tilt Device â€¢ Drag to Rotate â€¢ Pinch to Zoom
+                {isCoarsePointer()
+                  ? 'Tilt Device • Drag to Rotate • Pinch to Zoom'
+                  : 'Move Mouse to Tilt • Drag to Rotate • Scroll to Zoom'}
               </p>
             </div>
           </div>

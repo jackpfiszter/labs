@@ -565,6 +565,24 @@ const Scene = ({ flowers, groundColor, skyColor, stemTopColor, flowerSize, parti
   );
 };
 
+// On tall (portrait) screens widen the vertical fov so the garden isn't cropped at the sides;
+// landscape keeps the original 45deg.
+const BASE_FOV = 45;
+const MIN_HALF_WIDTH_TAN = 0.3;
+
+const ResponsiveFov = () => {
+  const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera;
+  const width = useThree((state) => state.size.width);
+  const height = useThree((state) => state.size.height);
+  useEffect(() => {
+    const aspect = width / Math.max(1, height);
+    const tanHalf = Math.max(Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)), MIN_HALF_WIDTH_TAN / aspect);
+    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(tanHalf));
+    camera.updateProjectionMatrix();
+  }, [camera, width, height]);
+  return null;
+};
+
 interface FlowerData {
   id: string;
   name: string;
@@ -645,10 +663,33 @@ export default function Component() {
     if (e.key === 'Enter') addFlower();
   };
 
+  // Ignore the click that ends a drag (mouse-orbiting the garden shouldn't bring the UI back)
+  const pointerDownAt = useRef<{ x: number, y: number } | null>(null);
+
+  // Lift the input above the on-screen keyboard when the visual viewport shrinks
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  const [inputFocused, setInputFocused] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      setKeyboardInset(Math.max(0, Math.round(window.innerHeight - (vv.offsetTop + vv.height))));
+    };
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+
   return (
     <div 
       className="h-screen w-screen overflow-hidden relative"
-      onClick={() => {
+      onPointerDown={(e) => { pointerDownAt.current = { x: e.clientX, y: e.clientY }; }}
+      onClick={(e) => {
+        const start = pointerDownAt.current;
+        if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 8) return;
         if (uiHidden) {
           setUiHidden(false);
           gizmoRuntime.performHaptic('light');
@@ -656,8 +697,9 @@ export default function Component() {
       }}
     >
       <div aria-hidden className="fixed inset-0 -z-10" style={{ background: skyColor }} />
-      <div className="absolute inset-0">
-        <Canvas camera={{ position: [0, 6, 12], fov: 45 }} gl={{ antialias: true, outputColorSpace: THREE.SRGBColorSpace }}>
+      <div className="absolute inset-0 cursor-grab active:cursor-grabbing">
+        <Canvas camera={{ position: [0, 6, 12], fov: BASE_FOV }} dpr={[1, 2]} gl={{ antialias: true, outputColorSpace: THREE.SRGBColorSpace }}>
+          <ResponsiveFov />
           <Scene 
             flowers={flowers} 
             groundColor={groundColor} 
@@ -676,8 +718,8 @@ export default function Component() {
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-6 text-center">
           {titleVisible && (
             <h1 
-              className="font-bold mb-2 drop-shadow-lg animate-pulse"
-              style={{ color: titleColor, fontSize: `${titleSize}px`, lineHeight: 1.1 }}
+              className="font-bold mb-2 drop-shadow-lg animate-pulse max-w-3xl"
+              style={{ color: titleColor, fontSize: `clamp(${titleSize}px, 3.2vw, ${titleSize * 1.75}px)`, lineHeight: 1.1 }}
             >
               {titleText}
             </h1>
@@ -693,16 +735,27 @@ export default function Component() {
         </div>
       )}
 
-      <div className="absolute bottom-12 left-0 w-full flex flex-col items-center z-10 pointer-events-none">
+      <div
+        className="absolute left-0 w-full flex flex-col items-center z-10 pointer-events-none"
+        style={{
+          bottom: inputFocused && keyboardInset > 0
+            ? `${keyboardInset + 16}px`
+            : 'max(3rem, calc(env(safe-area-inset-bottom) + 1rem))',
+        }}
+      >
         {!uiHidden && inputVisible && (
-          <div className="pointer-events-auto w-4/5 max-w-sm flex items-center gap-2">
+          <div className="pointer-events-auto w-4/5 max-w-sm md:max-w-md flex items-center gap-2">
             <input
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               placeholder={inputPlaceholder}
-              className="flex-1 px-6 py-4 rounded-full shadow-2xl outline-none text-center transition-all focus:scale-105"
+              enterKeyHint="done"
+              autoComplete="off"
+              className="min-w-0 flex-1 px-6 py-4 rounded-full shadow-2xl outline-none text-center transition-all focus:scale-105"
               style={{ 
                 color: '#FFFFFF', 
                 fontSize: `${inputSize}px`,
@@ -717,7 +770,7 @@ export default function Component() {
                   setUiHidden(true);
                   gizmoRuntime.performHaptic('light');
                 }}
-                className="aspect-square h-full flex items-center justify-center rounded-full shadow-2xl border-2 border-white bg-black active:scale-90 transition-transform"
+                className="shrink-0 aspect-square h-full flex items-center justify-center rounded-full shadow-2xl border-2 border-white bg-black hover:scale-105 active:scale-90 transition-transform"
                 style={{
                   color: hideUIButtonColor,
                   fontSize: `${hideUIButtonSize}px`,

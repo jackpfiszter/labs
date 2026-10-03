@@ -5,7 +5,6 @@ import { lazy } from 'react';
 export const pieces = [
   { id: 'spheres',        title: 'Spheres',        component: lazy(() => import('./pieces/spheres/Spheres.jsx')) },
   { id: 'flowers',        title: 'Flowers',        static: true },
-  { id: 'sushi-art',      title: 'Sushi Art',      static: true },
   { id: 'bauhaus-sushi',  title: 'Bauhaus Sushi',  component: lazy(() => import('./pieces/BauhausSushi.tsx')) },
   { id: 'colour-cycling', title: 'Colour Cycling', component: lazy(() => import('./pieces/ColourCycling.tsx')) },
   { id: 'contrast',       title: 'Contrast',       component: lazy(() => import('./pieces/Contrast.tsx')) },

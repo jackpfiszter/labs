@@ -39,7 +39,12 @@ export default function Component() {
   const colorCacheRef = useRef<Map<number, string>>(new Map());
 
   const [isListening, setIsListening] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dprRef = useRef(1);
+  const mountedRef = useRef(true);
+  const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 
   const lowColor = tweaks.lowColor.useState();
   const lowMidColor = tweaks.lowMidColor.useState();
@@ -84,15 +89,23 @@ export default function Component() {
     setIsListening(false);
   }, []);
 
+  // Called from the start button's click, so the AudioContext is created inside the user gesture.
   const startMic = async () => {
+    if (isStarting) return;
+    setError(null);
+    setIsStarting(true);
+    const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+    const context: AudioContext = new AudioContextClass();
+    audioContextRef.current = context;
+    context.resume().catch(() => {});
     try {
-      setError(null);
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('getUserMedia unsupported');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!mountedRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       streamRef.current = stream;
-
-      const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
-      const context = new AudioContextClass();
-      audioContextRef.current = context;
 
       const analyser = context.createAnalyser();
       analyser.fftSize = Math.pow(2, Math.round(Math.log2(fftSize))); 
@@ -103,18 +116,27 @@ export default function Component() {
 
       const source = context.createMediaStreamSource(stream);
       source.connect(analyser);
+      await context.resume().catch(() => {});
 
       setIsListening(true);
       gizmoRuntime.performHaptic('medium');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Mic access denied:', err);
-      setError('Microphone access denied. Please enable it in settings.');
+      stopMic();
+      setError(err?.name === 'NotAllowedError' || err?.name === 'SecurityError'
+        ? 'Microphone access denied. Allow it in your browser or device settings, then try again.'
+        : 'No microphone available.');
+    } finally {
+      if (mountedRef.current) setIsStarting(false);
     }
   };
 
   useEffect(() => {
-    startMic();
-    return () => stopMic();
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      stopMic();
+    };
   }, []);
 
   const getHeatMapColor = (value: number) => {
@@ -210,7 +232,7 @@ export default function Component() {
 
       const width = canvas.width;
       const height = canvas.height;
-      const step = scrollSpeed;
+      const step = Math.max(1, Math.round(scrollSpeed * dprRef.current)); // scroll speed in CSS px
 
       offCtx.drawImage(offCanvas, step, 0, width - step, height, 0, 0, width - step, height);
 
@@ -267,40 +289,68 @@ export default function Component() {
     };
   }, [isListening, backgroundColor, lowColor, lowMidColor, midColor, highColor, scrollSpeed, sensitivity, fftSize, logScale, smoothing, minDecibels, maxDecibels, interpolation]);
 
+  // Canvas follows the piece's own box (not the window) at devicePixelRatio,
+  // keeping what's already been drawn when it resizes.
   useEffect(() => {
-    const handleResize = () => {
-      if (canvasRef.current) {
-        canvasRef.current.width = window.innerWidth;
-        canvasRef.current.height = window.innerHeight;
-        if (offscreenCanvasRef.current) {
-          offscreenCanvasRef.current.width = window.innerWidth;
-          offscreenCanvasRef.current.height = window.innerHeight;
+    const container = containerRef.current;
+    if (!container) return;
+    const resize = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const { width: cssWidth, height: cssHeight } = container.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.max(1, Math.round(cssWidth * dpr));
+      const height = Math.max(1, Math.round(cssHeight * dpr));
+      if (canvas.width === width && canvas.height === height) return;
+      dprRef.current = dpr;
+      canvas.width = width;
+      canvas.height = height;
+      const off = offscreenCanvasRef.current;
+      if (off) {
+        const copy = document.createElement('canvas');
+        copy.width = off.width;
+        copy.height = off.height;
+        copy.getContext('2d')?.drawImage(off, 0, 0);
+        off.width = width;
+        off.height = height;
+        const offCtx = off.getContext('2d', { alpha: false });
+        if (offCtx) {
+          offCtx.fillStyle = backgroundColor;
+          offCtx.fillRect(0, 0, width, height);
+          offCtx.drawImage(copy, 0, 0, copy.width, copy.height, 0, 0, width, height);
         }
       }
+      const ctx = canvas.getContext('2d', { alpha: false });
+      if (ctx) {
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, width, height);
+        if (off) ctx.drawImage(off, 0, 0);
+      }
     };
-    window.addEventListener('resize', handleResize);
-    handleResize();
-    return () => window.removeEventListener('resize', handleResize);
+    const observer = new ResizeObserver(resize);
+    observer.observe(container);
+    resize();
+    return () => observer.disconnect();
   }, []);
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative font-sans" style={{ backgroundColor }}>
+    <div ref={containerRef} className="h-screen w-screen overflow-hidden relative font-sans" style={{ backgroundColor }}>
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full"
       />
 
-      <div className="absolute inset-0 flex flex-col pointer-events-none p-6">
+      <div className="absolute inset-0 flex flex-col pointer-events-none p-6 pt-[max(1.5rem,env(safe-area-inset-top))]">
         {promptVisible && (
           <div 
             className="absolute left-0 right-0 flex justify-center z-10"
-            style={{ top: `${promptPosition}%` }}
+            style={{ top: `calc(${promptPosition}% + env(safe-area-inset-top))` }}
           >
             <h2 
               className="font-black tracking-tighter text-center uppercase"
               style={{ 
                 color: promptColor, 
-                fontSize: `${promptSize}px`,
+                fontSize: `min(${promptSize}px, 19vw)`,
                 textShadow: '0 4px 12px rgba(0,0,0,0.5)'
               }}
             >
@@ -309,11 +359,22 @@ export default function Component() {
           </div>
         )}
 
-        <div className="flex-1">
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
           {error && (
-            <div className="mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm">
+            <div className="max-w-sm p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm text-center">
               {error}
             </div>
+          )}
+          {!isListening && (
+            <button
+              onClick={startMic}
+              disabled={isStarting}
+              className="pointer-events-auto flex items-center gap-2 min-h-[44px] px-6 py-3 rounded-full border-2 font-bold uppercase tracking-wide text-sm md:text-base cursor-pointer transition-opacity [@media(hover:hover)]:hover:opacity-80 disabled:opacity-50"
+              style={{ color: promptColor, borderColor: promptColor }}
+            >
+              {error ? <MicOff size={20} /> : <Mic size={20} />}
+              {error ? 'Try again' : `${isCoarse ? 'Tap' : 'Click'} to start microphone`}
+            </button>
           )}
         </div>
 
@@ -335,8 +396,8 @@ export default function Component() {
       </div>
 
       {isListening && (
-        <div className="absolute left-2 inset-y-0 flex flex-col pointer-events-none z-20">
-          <div className="relative h-full w-12 text-[10px] font-bold" style={{ color: promptColor }}>
+        <div className="absolute left-[max(0.5rem,env(safe-area-inset-left))] inset-y-0 flex flex-col pointer-events-none z-20">
+          <div className="relative h-full w-12 text-[10px] md:text-xs font-bold" style={{ color: promptColor }}>
             {(() => {
               const sampleRate = 44100;
               const minFreq = 20;

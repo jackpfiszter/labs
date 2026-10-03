@@ -22,18 +22,18 @@ const tweaks = gizmoRuntime.tweaks({
 
 // Dingbats (U+2700 to U+27BF)
 const DINGBATS = [
-  'âœ', 'âœ‚', 'âœƒ', 'âœ„', 'âœ†', 'âœ‡', 'âœˆ', 'âœ‰', 'âœŒ', 'âœ', 'âœŽ', 'âœ', 'âœ', 'âœ‘', 'âœ’', 'âœ“', 'âœ”', 'âœ•', 'âœ–', 'âœ—', 'âœ˜', 'âœ™', 'âœš', 'âœ›', 'âœœ', 'âœ', 'âœž', 'âœŸ', 'âœ ', 'âœ¡', 'âœ¢', 'âœ£', 'âœ¤', 'âœ¥', 'âœ¦', 'âœ§', 'âœ©', 'âœª', 'âœ«', 'âœ¬', 'âœ­', 'âœ®', 'âœ¯', 'âœ°', 'âœ±', 'âœ²', 'âœ³', 'âœ´', 'âœµ', 'âœ¶', 'âœ·', 'âœ¸', 'âœ¹', 'âœº', 'âœ»', 'âœ¼', 'âœ½', 'âœ¾', 'âœ¿', 'â€', 'â', 'â‚', 'âƒ', 'â„', 'â…', 'â†', 'â‡', 'âˆ', 'â‰', 'âŠ', 'â‹', 'â', 'â', 'â', 'â‘', 'â’', 'â–', 'â˜', 'â™', 'âš', 'â›', 'âœ', 'â', 'âž', 'â¡', 'â¢', 'â£', 'â¤', 'â¥', 'â¦', 'â§', 'âž”', 'âž˜', 'âž™', 'âžš', 'âž›', 'âžœ', 'âž', 'âžž', 'âžŸ', 'âž ', 'âž¡', 'âž¢', 'âž£', 'âž¤', 'âž¥', 'âž¦', 'âž§', 'âž¨', 'âž©', 'âžª', 'âž«', 'âž¬', 'âž­', 'âž®', 'âž¯', 'âž±', 'âž²', 'âž³', 'âž´', 'âžµ', 'âž¶', 'âž·', 'âž¸', 'âž¹', 'âžº', 'âž»', 'âž¼', 'âž½', 'âž¾'
+  '✁', '✂', '✃', '✄', '✆', '✇', '✈', '✉', '✌', '✍', '✎', '✏', '✐', '✑', '✒', '✓', '✔', '✕', '✖', '✗', '✘', '✙', '✚', '✛', '✜', '✝', '✞', '✟', '✠', '✡', '✢', '✣', '✤', '✥', '✦', '✧', '✩', '✪', '✫', '✬', '✭', '✮', '✯', '✰', '✱', '✲', '✳', '✴', '✵', '✶', '✷', '✸', '✹', '✺', '✻', '✼', '✽', '✾', '✿', '❀', '❁', '❂', '❃', '❄', '❅', '❆', '❇', '❈', '❉', '❊', '❋', '❍', '❏', '❐', '❑', '❒', '❖', '❘', '❙', '❚', '❛', '❜', '❝', '❞', '❡', '❢', '❣', '❤', '❥', '❦', '❧', '➔', '➘', '➙', '➚', '➛', '➜', '➝', '➞', '➟', '➠', '➡', '➢', '➣', '➤', '➥', '➦', '➧', '➨', '➩', '➪', '➫', '➬', '➭', '➮', '➯', '➱', '➲', '➳', '➴', '➵', '➶', '➷', '➸', '➹', '➺', '➻', '➼', '➽', '➾'
 ];
 
 // Alchemical Symbols (U+1F700 to U+1F77F)
 const ALCHEMICAL = [
-  'ðŸœ€', 'ðŸœ', 'ðŸœ‚', 'ðŸœƒ', 'ðŸœ„', 'ðŸœ…', 'ðŸœ†', 'ðŸœ‡', 'ðŸœˆ', 'ðŸœ‰', 'ðŸœŠ', 'ðŸœ‹', 'ðŸœŒ', 'ðŸœ', 'ðŸœŽ', 'ðŸœ', 'ðŸœ', 'ðŸœ‘', 'ðŸœ’', 'ðŸœ“', 'ðŸœ”', 'ðŸœ•', 'ðŸœ–', 'ðŸœ—', 'ðŸœ˜', 'ðŸœ™', 'ðŸœš', 'ðŸœ›', 'ðŸœœ', 'ðŸœ', 'ðŸœž', 'ðŸœŸ', 'ðŸœ ', 'ðŸœ¡', 'ðŸœ¢', 'ðŸœ£', 'ðŸœ¤', 'ðŸœ¥', 'ðŸœ¦', 'ðŸœ§', 'ðŸœ¨', 'ðŸœ©', 'ðŸœª', 'ðŸœ«', 'ðŸœ¬', 'ðŸœ­', 'ðŸœ®', 'ðŸœ¯', 'ðŸœ°', 'ðŸœ±', 'ðŸœ²', 'ðŸœ³', 'ðŸœ´', 'ðŸœµ', 'ðŸœ¶', 'ðŸœ·', 'ðŸœ¸', 'ðŸœ¹', 'ðŸœº', 'ðŸœ»', 'ðŸœ¼', 'ðŸœ½', 'ðŸœ¾', 'ðŸœ¿', 'ðŸ€', 'ðŸ', 'ðŸ‚', 'ðŸƒ', 'ðŸ„', 'ðŸ…', 'ðŸ†', 'ðŸ‡', 'ðŸˆ', 'ðŸ‰', 'ðŸŠ', 'ðŸ‹', 'ðŸŒ', 'ðŸ', 'ðŸŽ', 'ðŸ', 'ðŸ', 'ðŸ‘', 'ðŸ’', 'ðŸ“', 'ðŸ”', 'ðŸ•', 'ðŸ–', 'ðŸ—', 'ðŸ˜', 'ðŸ™', 'ðŸš', 'ðŸ›', 'ðŸœ', 'ðŸ', 'ðŸž', 'ðŸŸ', 'ðŸ ', 'ðŸ¡', 'ðŸ¢', 'ðŸ£', 'ðŸ¤', 'ðŸ¥', 'ðŸ¦', 'ðŸ§', 'ðŸ¨', 'ðŸ©', 'ðŸª', 'ðŸ«', 'ðŸ¬', 'ðŸ­', 'ðŸ®', 'ðŸ¯', 'ðŸ°'
+  '🜀', '🜁', '🜂', '🜃', '🜄', '🜅', '🜆', '🜇', '🜈', '🜉', '🜊', '🜋', '🜌', '🜍', '🜎', '🜏', '🜐', '🜑', '🜒', '🜓', '🜔', '🜕', '🜖', '🜗', '🜘', '🜙', '🜚', '🜛', '🜜', '🜝', '🜞', '🜟', '🜠', '🜡', '🜢', '🜣', '🜤', '🜥', '🜦', '🜧', '🜨', '🜩', '🜪', '🜫', '🜬', '🜭', '🜮', '🜯', '🜰', '🜱', '🜲', '🜳', '🜴', '🜵', '🜶', '🜷', '🜸', '🜹', '🜺', '🜻', '🜼', '🜽', '🜾', '🜿', '🝀', '🝁', '🝂', '🝃', '🝄', '🝅', '🝆', '🝇', '🝈', '🝉', '🝊', '🝋', '🝌', '🝍', '🝎', '🝏', '🝐', '🝑', '🝒', '🝓', '🝔', '🝕', '🝖', '🝗', '🝘', '🝙', '🝚', '🝛', '🝜', '🝝', '🝞', '🝟', '🝠', '🝡', '🝢', '🝣', '🝤', '🝥', '🝦', '🝧', '🝨', '🝩', '🝪', '🝫', '🝬', '🝭', '🝮', '🝯', '🝰'
 ];
 
 // Miscellaneous Symbols (U+2600 to U+26FF)
 // Filtering out common emojis and non-iconographic ones
 const MISC_SYMBOLS = [
-  'â˜€', 'â˜', 'â˜‚', 'â˜ƒ', 'â˜„', 'â˜…', 'â˜†', 'â˜‡', 'â˜ˆ', 'â˜‰', 'â˜Š', 'â˜‹', 'â˜Œ', 'â˜', 'â˜Ž', 'â˜', 'â˜', 'â˜‘', 'â˜’', 'â˜“', 'â˜–', 'â˜—', 'â˜˜', 'â˜™', 'â˜š', 'â˜›', 'â˜œ', 'â˜', 'â˜ž', 'â˜Ÿ', 'â˜ ', 'â˜¡', 'â˜¢', 'â˜£', 'â˜¤', 'â˜¥', 'â˜¦', 'â˜§', 'â˜¨', 'â˜©', 'â˜ª', 'â˜«', 'â˜¬', 'â˜­', 'â˜®', 'â˜¯', 'â˜°', 'â˜±', 'â˜²', 'â˜³', 'â˜´', 'â˜µ', 'â˜¶', 'â˜·', 'â˜¸', 'â˜¹', 'â˜º', 'â˜»', 'â˜¼', 'â˜½', 'â˜¾', 'â˜¿', 'â™€', 'â™', 'â™‚', 'â™ƒ', 'â™„', 'â™…', 'â™†', 'â™‡', 'â™ˆ', 'â™‰', 'â™Š', 'â™‹', 'â™Œ', 'â™', 'â™Ž', 'â™', 'â™', 'â™‘', 'â™’', 'â™“', 'â™”', 'â™•', 'â™–', 'â™—', 'â™˜', 'â™™', 'â™š', 'â™›', 'â™œ', 'â™', 'â™ž', 'â™Ÿ', 'â™ ', 'â™¡', 'â™¢', 'â™£', 'â™¤', 'â™¥', 'â™¦', 'â™§', 'â™¨', 'â™©', 'â™ª', 'â™«', 'â™¬', 'â™­', 'â™®', 'â™¯', 'â™°', 'â™±', 'â™²', 'â™³', 'â™´', 'â™µ', 'â™¶', 'â™·', 'â™¸', 'â™¹', 'â™º', 'â™»', 'â™¼', 'â™½', 'â™¾', 'â™¿', 'âš€', 'âš', 'âš‚', 'âšƒ', 'âš„', 'âš…', 'âš‡', 'âšˆ', 'âš‰', 'âšŠ', 'âš‹', 'âšŒ', 'âš', 'âšŽ', 'âš', 'âš', 'âš‘', 'âš’', 'âš“', 'âš”', 'âš•', 'âš–', 'âš—', 'âš˜', 'âš™', 'âšš', 'âš›', 'âšœ', 'âš', 'âšž', 'âšŸ', 'âš ', 'âš¡', 'âš¢', 'âš£', 'âš¤', 'âš¥', 'âš¦', 'âš§', 'âš¨', 'âš©', 'âšª', 'âš«', 'âš¬', 'âš­', 'âš®', 'âš¯', 'âš°', 'âš±', 'âš²', 'âš³', 'âš´', 'âšµ', 'âš¶', 'âš·', 'âš¸', 'âš¹', 'âšº', 'âš»', 'âš¼', 'âš½', 'âš¾', 'âš¿', 'â›€', 'â›', 'â›‚', 'â›ƒ', 'â›„', 'â›…', 'â›ˆ', 'â›Ž', 'â›', 'â›‘', 'â›“', 'â›”', 'â›©', 'â›ª', 'â›°', 'â›±', 'â›²', 'â›³', 'â›´', 'â›µ', 'â›·', 'â›¸', 'â›¹', 'â›º', 'â›½'
+  '☀', '☁', '☂', '☃', '☄', '★', '☆', '☇', '☈', '☉', '☊', '☋', '☌', '☍', '☎', '☏', '☐', '☑', '☒', '☓', '☖', '☗', '☘', '☙', '☚', '☛', '☜', '☝', '☞', '☟', '☠', '☡', '☢', '☣', '☤', '☥', '☦', '☧', '☨', '☩', '☪', '☫', '☬', '☭', '☮', '☯', '☰', '☱', '☲', '☳', '☴', '☵', '☶', '☷', '☸', '☹', '☺', '☻', '☼', '☽', '☾', '☿', '♀', '♁', '♂', '♃', '♄', '♅', '♆', '♇', '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓', '♔', '♕', '♖', '♗', '♘', '♙', '♚', '♛', '♜', '♝', '♞', '♟', '♠', '♡', '♢', '♣', '♤', '♥', '♦', '♧', '♨', '♩', '♪', '♫', '♬', '♭', '♮', '♯', '♰', '♱', '♲', '♳', '♴', '♵', '♶', '♷', '♸', '♹', '♺', '♻', '♼', '♽', '♾', '♿', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅', '⚇', '⚈', '⚉', '⚊', '⚋', '⚌', '⚍', '⚎', '⚏', '⚐', '⚑', '⚒', '⚓', '⚔', '⚕', '⚖', '⚗', '⚘', '⚙', '⚚', '⚛', '⚜', '⚝', '⚞', '⚟', '⚠', '⚡', '⚢', '⚣', '⚤', '⚥', '⚦', '⚧', '⚨', '⚩', '⚪', '⚫', '⚬', '⚭', '⚮', '⚯', '⚰', '⚱', '⚲', '⚳', '⚴', '⚵', '⚶', '⚷', '⚸', '⚹', '⚺', '⚻', '⚼', '⚽', '⚾', '⚿', '⛀', '⛁', '⛂', '⛃', '⛄', '⛅', '⛈', '⛎', '⛏', '⛑', '⛓', '⛔', '⛩', '⛪', '⛰', '⛱', '⛲', '⛳', '⛴', '⛵', '⛷', '⛸', '⛹', '⛺', '⛽'
 ]; // Removed hand emojis and other problematic symbols
 
 const FULL_COLLECTION_SET = [...DINGBATS, ...ALCHEMICAL, ...MISC_SYMBOLS];
@@ -70,6 +70,7 @@ export default function Component() {
     }
   });
   const [isDispensing, setIsDispensing] = useState(false);
+  const isCoarsePointer = useState(() => window.matchMedia?.('(pointer: coarse)').matches ?? true)[0];
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(collected)));
@@ -78,9 +79,12 @@ export default function Component() {
   useEffect(() => {
     if (!sceneRef.current) return;
 
-    const { Engine, Render, Runner, Bodies, Composite, Mouse, MouseConstraint, Events } = Matter;
-    const width = sceneRef.current.clientWidth;
-    const height = sceneRef.current.clientHeight;
+    const { Engine, Render, Runner, Bodies, Body, Composite, Mouse, MouseConstraint, Events } = Matter;
+    const sceneEl = sceneRef.current;
+    let width = sceneEl.clientWidth;
+    let height = sceneEl.clientHeight;
+    // Glyphs grow a little on big screens (1x at phone size, up to 1.5x)
+    const glyphScale = Math.min(1.5, Math.max(1, Math.min(width, height) / 267));
     
     const engine = Engine.create();
     engineRef.current = engine;
@@ -92,6 +96,8 @@ export default function Component() {
       options: {
         width: width,
         height: height,
+        // Integer ratio so Matter's mouse mapping (parseInt of data-pixel-ratio) stays exact
+        pixelRatio: Math.min(2, Math.ceil(window.devicePixelRatio || 1)),
         wireframes: false,
         background: 'transparent',
         showAngleIndicator: false,
@@ -111,10 +117,12 @@ export default function Component() {
       isStatic: true, 
       render: { visible: false } 
     };
-    const ground = Bodies.rectangle(width / 2, height + thickness / 2, width * 2, thickness, wallOptions);
-    const wallLeft = Bodies.rectangle(-thickness / 2, height / 2, thickness, height * 2, wallOptions);
-    const wallRight = Bodies.rectangle(width + thickness / 2, height / 2, thickness, height * 2, wallOptions);
-    const ceiling = Bodies.rectangle(width / 2, -thickness / 2, width * 2, thickness, wallOptions);
+    // Walls are long enough to survive any later resize; they are just repositioned
+    const span = 10000;
+    const ground = Bodies.rectangle(width / 2, height + thickness / 2, span, thickness, wallOptions);
+    const wallLeft = Bodies.rectangle(-thickness / 2, height / 2, thickness, span, wallOptions);
+    const wallRight = Bodies.rectangle(width + thickness / 2, height / 2, thickness, span, wallOptions);
+    const ceiling = Bodies.rectangle(width / 2, -thickness / 2, span, thickness, wallOptions);
     
     Composite.add(engine.world, [ground, wallLeft, wallRight, ceiling]);
 
@@ -126,7 +134,7 @@ export default function Component() {
     const initialChars = displayPool.map((char) => {
       const x = Math.random() * (width - 40) + 20;
       const y = Math.random() * (height - 40) + 20;
-      const body = Bodies.circle(x, y, 8, {
+      const body = Bodies.circle(x, y, 8 * glyphScale, {
         restitution: 0.8,
         friction: 0.001,
         frictionAir: 0.02, // Increased air friction for smoother movement
@@ -150,7 +158,7 @@ export default function Component() {
     Events.on(render, 'afterRender', () => {
       const context = render.context;
       const bodies = Composite.allBodies(engine.world);
-      context.font = '16px "Helvetica Neue", Helvetica, Arial, sans-serif';
+      context.font = `${16 * glyphScale}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
       context.textAlign = 'center';
       context.textBaseline = 'middle';
       context.fillStyle = textColor;
@@ -175,12 +183,39 @@ export default function Component() {
     });
     Composite.add(engine.world, mouseConstraint);
     render.mouse = mouse;
+    // Don't hijack the scroll wheel (Matter preventDefaults it), and release drags outside the canvas
+    mouse.element.removeEventListener('wheel', (mouse as any).mousewheel);
+    window.addEventListener('mouseup', (mouse as any).mouseup);
 
     Render.run(render);
     const runner = Runner.create();
     Runner.run(runner, engine);
 
+    // Follow the container size (resize / orientation change / layout switch)
+    const ro = new ResizeObserver(() => {
+      const w = sceneEl.clientWidth;
+      const h = sceneEl.clientHeight;
+      if (!w || !h || (w === width && h === height)) return;
+      width = w;
+      height = h;
+      Render.setSize(render, w, h);
+      Body.setPosition(ground, { x: w / 2, y: h + thickness / 2 });
+      Body.setPosition(wallLeft, { x: -thickness / 2, y: h / 2 });
+      Body.setPosition(wallRight, { x: w + thickness / 2, y: h / 2 });
+      Body.setPosition(ceiling, { x: w / 2, y: -thickness / 2 });
+      Composite.allBodies(engine.world).forEach((b) => {
+        if (b.isStatic) return;
+        const r = 8 * glyphScale;
+        const x = Math.min(Math.max(b.position.x, r), w - r);
+        const y = Math.min(Math.max(b.position.y, r), h - r);
+        if (x !== b.position.x || y !== b.position.y) Body.setPosition(b, { x, y });
+      });
+    });
+    ro.observe(sceneEl);
+
     return () => {
+      ro.disconnect();
+      window.removeEventListener('mouseup', (mouse as any).mouseup);
       Runner.stop(runner);
       Render.stop(render);
       Composite.clear(engine.world, false);
@@ -259,20 +294,36 @@ export default function Component() {
     }, 600);
   }, [isDispensing]);
 
+  // Keyboard: Space / Enter dispenses (unless a button or cell has focus)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.tagName === 'BUTTON') return;
+      if ((e.code === 'Space' || e.key === 'Enter') && !e.repeat) {
+        e.preventDefault();
+        dispense();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dispense]);
+
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col items-center font-mono" style={{ backgroundColor: bgColor, color: textColor }}>
-      <div className="z-10 flex flex-col items-center w-full h-full px-4 pt-6 overflow-y-auto">
-        <div className="w-full aspect-[4/3] relative overflow-hidden shrink-0 border border-current">
+      {/* Portrait: one scrolling column (as on the phone). Landscape: scene left, controls + collection right. */}
+      <div className="z-10 flex flex-col landscape:flex-row items-center landscape:items-stretch landscape:gap-6 w-full h-full pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1.5rem,env(safe-area-inset-top))] landscape:pt-[max(1rem,env(safe-area-inset-top))] landscape:pb-[max(1rem,env(safe-area-inset-bottom))] overflow-y-auto landscape:overflow-hidden">
+        <div className="w-full aspect-[4/3] landscape:aspect-auto landscape:w-auto landscape:flex-1 landscape:min-w-0 landscape:h-full relative overflow-hidden shrink-0 border border-current cursor-grab active:cursor-grabbing">
           <div ref={sceneRef} className="absolute inset-0 w-full h-full" style={{ touchAction: 'none' }} />
         </div>
-        
-        <div className="mt-4 flex flex-col items-center shrink-0">
+
+        <div className="contents landscape:flex landscape:flex-col landscape:items-center landscape:shrink-0 landscape:w-[clamp(15rem,34vw,30rem)] landscape:h-full landscape:overflow-y-auto">
+        <div className="mt-4 landscape:mt-0 flex flex-col items-center shrink-0">
           <div 
             onClick={() => result && handleCopy(result)}
-            className="w-24 h-24 flex items-center justify-center border border-current bg-white/50 transition-colors relative active:bg-black/5"
+            className={`w-24 h-24 lg:w-32 lg:h-32 flex items-center justify-center border border-current bg-white/50 transition-colors relative active:bg-black/5 ${result ? 'cursor-pointer [@media(hover:hover)]:hover:bg-black/5' : ''}`}
           >
-            <span className={`text-6xl ${isDispensing ? 'animate-pulse opacity-20' : ''}`} style={{ fontVariantEmoji: 'text', fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-              {result ? result + '\uFE0E' : ''}
+            <span className={`text-6xl lg:text-7xl ${isDispensing ? 'animate-pulse opacity-20' : ''}`} style={{ fontVariantEmoji: 'text', fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+              {result ? result + '︎' : ''}
             </span>
             {showCopyFeedback && copySuccessVisible && (
               <div 
@@ -287,15 +338,16 @@ export default function Component() {
               </div>
             )}
           </div>
-          <div className="mt-2 text-[10px] opacity-40 uppercase tracking-widest">Tap to copy</div>
+          <div className="mt-2 text-[10px] lg:text-xs opacity-40 uppercase tracking-widest">{isCoarsePointer ? 'Tap' : 'Click'} to copy</div>
         </div>
 
         <div className="flex flex-col gap-4 w-full mt-4 shrink-0">
           {dispenseVisible && (
             <button
-              onTouchStart={dispense}
+              onPointerDown={(e) => { if (e.button === 0) dispense(); }}
+              onClick={(e) => { if (e.detail === 0) dispense(); }}
               disabled={isDispensing}
-              className={`w-full py-4 border border-current font-bold tracking-widest transition-all flex items-center justify-center gap-2 ${isDispensing ? 'bg-black text-white' : 'active:bg-black active:text-white'}`}
+              className={`w-full py-4 border border-current font-bold tracking-widest transition-all flex items-center justify-center gap-2 ${isDispensing ? 'bg-black text-white' : 'cursor-pointer [@media(hover:hover)]:hover:bg-black/5 active:bg-black active:text-white'}`}
               style={{ color: isDispensing ? '#FFFFFF' : dispenseColor, fontSize: `${dispenseSize}px` }}
             >
               {dispenseText}
@@ -304,7 +356,7 @@ export default function Component() {
         </div>
 
         {historyVisible && (
-          <div className="mt-6 w-full pb-10">
+          <div className="mt-6 w-full pb-[max(2.5rem,env(safe-area-inset-bottom))] landscape:pb-0">
             <div className="flex items-center justify-between gap-2 mb-3 border-b border-current pb-1">
               <span style={{ color: historyColor, fontSize: `${historySize}px` }} className="uppercase font-bold tracking-widest">
                 {historyLabel}
@@ -313,27 +365,28 @@ export default function Component() {
                 [{collected.size}/{FULL_COLLECTION_SET.length}]
               </span>
             </div>
-            <div className="grid grid-cols-8 gap-1 justify-items-center">
+            <div className="grid grid-cols-8 landscape:grid-cols-[repeat(auto-fill,minmax(2.25rem,1fr))] gap-1 justify-items-center">
               {FULL_COLLECTION_SET.map((char, i) => {
                 const isCollected = collected.has(char);
                 return (
                   <div
                     key={i}
                     onClick={() => isCollected && handleCopy(char)}
-                    className={`relative w-8 h-8 flex items-center justify-center border transition-all duration-300 ${
+                    className={`relative w-full max-w-[2.75rem] aspect-square flex items-center justify-center border transition-all duration-300 ${
                       isCollected 
-                        ? 'border-current opacity-100 scale-100 active:bg-black active:text-white' 
+                        ? 'border-current opacity-100 scale-100 cursor-pointer [@media(hover:hover)]:hover:bg-black/5 active:bg-black active:text-white' 
                         : 'border-current/10 opacity-20 scale-90 grayscale'
                     }`}
                     style={{ fontSize: '16px', fontVariantEmoji: 'text', fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
                   >
-                    {char + '\uFE0E'}
+                    {char + '︎'}
                   </div>
                 );
               })}
             </div>
           </div>
         )}
+        </div>
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `

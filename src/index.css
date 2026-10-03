@@ -3,4 +3,18 @@
 @tailwind utilities;
 
 html, body, #root { width: 100%; height: 100%; }
-body { background: #000; overflow: hidden; }
+
+body {
+  background: #000;
+  overflow: hidden;
+  overscroll-behavior: none;          /* no pull-to-refresh or rubber-banding */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;        /* no long-press callout on iOS */
+  user-select: none;
+  touch-action: manipulation;         /* no double-tap zoom */
+}
+
+input, textarea, [contenteditable] { user-select: text; }
+
+/* Drags on a scene move the scene, not the page */
+canvas { touch-action: none; }

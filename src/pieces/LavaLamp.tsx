@@ -244,17 +244,35 @@ function Scene() {
   
   const { camera } = useThree();
   const targetZoom = useRef(zoomLevel);
+  // Only ease towards the zoom tweak until it's reached (or the user zooms themselves),
+  // so wheel / pinch zoom from OrbitControls isn't pulled back every frame.
+  const easingZoom = useRef(true);
+  const lastSetZoom = useRef<number | null>(null);
 
   useEffect(() => {
     targetZoom.current = zoomLevel;
+    easingZoom.current = true;
+    lastSetZoom.current = null;
   }, [zoomLevel]);
   
   useFrame((state, delta) => {
-    // Smoothly interpolate camera position for zoom
+    if (!easingZoom.current) return;
     const currentZoom = camera.position.length();
+    // Distance changed since our last frame -> the user wheel/pinch-zoomed; hand over to them
+    if (lastSetZoom.current !== null && Math.abs(currentZoom - lastSetZoom.current) > 1e-3) {
+      easingZoom.current = false;
+      lastSetZoom.current = null;
+      return;
+    }
+    // Smoothly interpolate camera position for zoom
     const newZoom = THREE.MathUtils.lerp(currentZoom, targetZoom.current, 0.05);
     camera.position.setLength(newZoom);
     camera.lookAt(0, 0, 0);
+    lastSetZoom.current = newZoom;
+    if (Math.abs(newZoom - targetZoom.current) < 0.01) {
+      easingZoom.current = false;
+      lastSetZoom.current = null;
+    }
   });
 
   // Generate spheres in a double helix
@@ -336,7 +354,7 @@ export default function Component() {
   const backgroundTopColor = tweaks.backgroundTopColor.useState();
   const backgroundBottomColor = tweaks.backgroundBottomColor.useState();
   
-  const handleTouchStart = () => {
+  const handlePointerDown = () => {
     gizmoRuntime.performHaptic('light');
   };
 
@@ -350,11 +368,12 @@ export default function Component() {
         }} 
       />
       <div 
-        className="h-screen w-screen touch-none"
-        onTouchStart={handleTouchStart}
+        className="h-screen w-screen touch-none cursor-grab active:cursor-grabbing"
+        onPointerDown={handlePointerDown}
       >
         <Canvas 
           shadows 
+          dpr={[1, 2]}
           gl={{ antialias: true, alpha: true }}
           camera={{ fov: 60, near: 0.1, far: 1000 }}
         >

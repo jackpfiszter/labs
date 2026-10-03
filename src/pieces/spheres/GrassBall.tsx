@@ -4,6 +4,7 @@ import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { gizmoRuntime } from '@gizmo/runtime';
 import { TextureLoader } from 'three';
+import FitFov from './FitFov.js';
 
 const tweaks = gizmoRuntime.tweaks({
   displacement: { type: 'slider', value: 1.66, min: 0, max: 2, step: 0.01, name: 'Grass Height', index: 0 },
@@ -409,7 +410,8 @@ const Scene = () => {
 
 
   return (
-    <Canvas>
+    <Canvas dpr={[1, 2]}>
+      <FitFov fov={75} minAspect={0.68} />
       <SceneContent />
     </Canvas>
   );
@@ -420,17 +422,17 @@ export default function Component() {
   const backgroundOuterColor = tweaks.backgroundOuterColor.useState();
   
   return (
-    <>
+    <div className="h-full w-full relative cursor-grab active:cursor-grabbing">
       <div 
         aria-hidden 
-        className="fixed inset-0 -z-10" 
+        className="absolute inset-0 -z-10" 
         style={{ 
           background: `radial-gradient(circle, ${backgroundInnerColor} 0%, ${backgroundOuterColor} 100%)` 
         }} 
       />
-      <div className="h-screen w-screen">
+      <div className="h-full w-full">
         <Scene />
       </div>
-    </>
+    </div>
   );
 }

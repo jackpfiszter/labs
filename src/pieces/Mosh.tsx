@@ -15,6 +15,10 @@ const tweaks = gizmoRuntime.tweaks({
 
 export default function Component() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const gyroActiveRef = useRef(false);
+  // Pixel sorting doesn't depend on tilt/pattern, so cache it per image + size + threshold
+  const sortedCacheRef = useRef<{ img: HTMLImageElement; w: number; h: number; threshold: number; data: ImageData } | null>(null);
   const originalImageRef = useRef<HTMLImageElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const animationRef = useRef<number>();
@@ -23,6 +27,8 @@ export default function Component() {
   const [isUploading, setIsUploading] = useState(false);
   const [gyroData, setGyroData] = useState({ roll: 0, pitch: 0, yaw: 0 });
   const [moshPattern, setMoshPattern] = useState(0);
+  const [imageVersion, setImageVersion] = useState(0);
+  const [size, setSize] = useState({ w: 0, h: 0 });
   
   // Tweaks
   const pixelSize = tweaks.pixelSize.useState();
@@ -54,6 +60,8 @@ export default function Component() {
   // Setup gyroscope listener
   useEffect(() => {
     const removeMotionListener = gizmoRuntime.addMotionListener((event) => {
+      const { roll, pitch, yaw } = event.attitude;
+      if (roll || pitch || yaw) gyroActiveRef.current = true; // real gyro: ignore mouse fallback
       setGyroData(event.attitude);
     });
     
@@ -62,9 +70,17 @@ export default function Component() {
     };
   }, []);
 
-  // Handle file upload
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  // Track the container size (the piece may live in an iframe, so don't use window size)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Handle file upload (file picker or drag-and-drop)
+  const loadFile = (file?: File | null) => {
     if (file && file.type.startsWith('image/')) {
       setIsUploading(true);
       const reader = new FileReader();
@@ -73,12 +89,32 @@ export default function Component() {
         img.onload = () => {
           originalImageRef.current = img;
           setIsUploading(false);
+          setImageVersion((v) => v + 1);
           gizmoRuntime.performHaptic('medium');
         };
         img.src = e.target?.result as string;
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    loadFile(event.target.files?.[0]);
+    event.target.value = '';
+  };
+
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    loadFile(event.dataTransfer.files?.[0]);
+  };
+
+  // Desktop fallback for tilt: mouse position over the piece acts as roll/pitch
+  const handlePointerMove = (event: React.PointerEvent) => {
+    if (event.pointerType !== 'mouse' || gyroActiveRef.current) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const nx = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = ((event.clientY - rect.top) / rect.height) * 2 - 1;
+    setGyroData({ roll: nx * 0.6, pitch: ny * 0.6, yaw: 0 });
   };
 
   // Trigger file input click
@@ -99,35 +135,44 @@ export default function Component() {
 
   // Draw the datamosh effect
   useEffect(() => {
-    if (!imageLoaded || !canvasRef.current || !originalImageRef.current) return;
+    if (!imageLoaded || !canvasRef.current || !originalImageRef.current || !size.w || !size.h) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas dimensions to match viewport
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    // Set canvas dimensions to match its container, at devicePixelRatio (capped at 2).
+    // The effect itself is computed in CSS pixels so it looks the same at any DPR.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssWidth = size.w;
+    const cssHeight = size.h;
+    const backingWidth = Math.round(cssWidth * dpr);
+    const backingHeight = Math.round(cssHeight * dpr);
+    if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
+      canvas.width = backingWidth;
+      canvas.height = backingHeight;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Calculate image dimensions to maintain aspect ratio and fill canvas
     const img = originalImageRef.current;
     const imgAspect = img.width / img.height;
-    const canvasAspect = canvas.width / canvas.height;
+    const canvasAspect = cssWidth / cssHeight;
     
     let drawWidth, drawHeight, offsetX, offsetY;
     
     if (imgAspect > canvasAspect) {
       // Image is wider than canvas (relative to their heights)
-      drawHeight = canvas.height;
+      drawHeight = cssHeight;
       drawWidth = drawHeight * imgAspect;
-      offsetX = (canvas.width - drawWidth) / 2;
+      offsetX = (cssWidth - drawWidth) / 2;
       offsetY = 0;
     } else {
       // Image is taller than canvas (relative to their widths)
-      drawWidth = canvas.width;
+      drawWidth = cssWidth;
       drawHeight = drawWidth / imgAspect;
       offsetX = 0;
-      offsetY = (canvas.height - drawHeight) / 2;
+      offsetY = (cssHeight - drawHeight) / 2;
     }
 
     const animate = (timestamp: number) => {
@@ -139,7 +184,7 @@ export default function Component() {
       
       // Clear canvas
       ctx.fillStyle = backgroundColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, cssWidth, cssHeight);
       
       if (showOriginal) {
         // Draw original image
@@ -151,21 +196,28 @@ export default function Component() {
         
         // Create a temporary canvas to manipulate pixels
         const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
         if (!tempCtx) return;
         
         tempCanvas.width = drawWidth;
         tempCanvas.height = drawHeight;
         
-        // Draw original image to temp canvas
-        tempCtx.drawImage(originalImageRef.current, 0, 0, drawWidth, drawHeight);
-        
-        // Get image data for manipulation
-        const imageData = tempCtx.getImageData(0, 0, drawWidth, drawHeight);
+        let imageData: ImageData;
+        const cache = sortedCacheRef.current;
+        if (cache && cache.img === originalImageRef.current && cache.w === drawWidth && cache.h === drawHeight && cache.threshold === sortThreshold) {
+          imageData = new ImageData(cache.data.data.slice(), cache.data.width, cache.data.height);
+        } else {
+          // Draw original image to temp canvas
+          tempCtx.drawImage(originalImageRef.current, 0, 0, drawWidth, drawHeight);
+          
+          // Get image data for manipulation
+          imageData = tempCtx.getImageData(0, 0, drawWidth, drawHeight);
+          
+          // Apply pixel sorting
+          pixelSort(imageData, sortThreshold);
+          sortedCacheRef.current = { img: originalImageRef.current, w: drawWidth, h: drawHeight, threshold: sortThreshold, data: new ImageData(imageData.data.slice(), imageData.width, imageData.height) };
+        }
         const data = imageData.data;
-        
-        // Apply pixel sorting
-        pixelSort(imageData, sortThreshold);
         
         // Apply datamosh effect based on gyro data
         for (let y = 0; y < drawHeight; y += pixelSize) {
@@ -228,8 +280,8 @@ export default function Component() {
         
         // Removed scan lines and other noise effects
       }
-      
-      animationRef.current = requestAnimationFrame(animate);
+      // The frame only depends on the inputs above, so draw once per change
+      // (coalesced to one frame) instead of recomputing every frame.
     };
     
     animationRef.current = requestAnimationFrame(animate);
@@ -239,7 +291,19 @@ export default function Component() {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [imageLoaded, gyroData, pixelSize, distortionStrength, glitchSpeed, showOriginal, backgroundColor, glitchColor1, glitchColor2, sortThreshold, moshPattern]);
+  }, [imageLoaded, imageVersion, size, gyroData, pixelSize, distortionStrength, glitchSpeed, showOriginal, backgroundColor, glitchColor1, glitchColor2, sortThreshold, moshPattern]);
+
+  // Keyboard: Space / Enter cycles the pattern (same as a tap / click)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== ' ' && e.key !== 'Enter') return;
+      if (document.activeElement && document.activeElement !== document.body) return;
+      e.preventDefault();
+      handleCanvasTap();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Helper function to convert hex color to RGB
   const hexToRgb = (hex: string) => {
@@ -303,19 +367,35 @@ export default function Component() {
   };
 
   return (
-    <>
+    <div
+      ref={containerRef}
+      className="relative h-screen w-screen overflow-hidden"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={handleDrop}
+    >
       <div aria-hidden className="fixed inset-0 -z-10" style={{ background: backgroundColor }} />
       
       <canvas 
         ref={canvasRef} 
-        className="w-screen h-screen touch-none"
+        className="absolute inset-0 w-full h-full touch-none cursor-pointer"
         onClick={handleCanvasTap}
+        onPointerMove={handlePointerMove}
       />
       
-      <div className="fixed bottom-0 left-0 p-4">
+      <div
+        className="absolute bottom-0 left-0"
+        style={{
+          paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+          paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+          paddingTop: '1rem',
+          paddingRight: '1rem',
+        }}
+      >
         <button
           onClick={handleUploadClick}
-          className="bg-white text-black w-16 h-16 flex items-center justify-center active:scale-95 transition-transform"
+          aria-label="Upload an image"
+          title="Upload an image (or drop one here)"
+          className="bg-white text-black w-16 h-16 flex items-center justify-center active:scale-95 [@media(hover:hover)]:hover:scale-105 transition-transform"
         >
           <Upload size={32} />
         </button>
@@ -330,11 +410,11 @@ export default function Component() {
       />
       
       {isUploading && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-10">
+        <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center z-10">
           <div className="text-white text-2xl">Uploading...</div>
         </div>
       )}
       
-    </>
+    </div>
   );
 }

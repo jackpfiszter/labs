@@ -3,6 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Trail } from '@react-three/drei';
 import * as THREE from 'three';
 import { gizmoRuntime } from '@gizmo/runtime';
+import FitFov from './FitFov.js';
 
 const tweaks = gizmoRuntime.tweaks({
   nucleusColor: { type: 'color', value: "#FFDD46", name: 'Nucleus', index: 0 },
@@ -117,8 +118,9 @@ export default function Component() {
   const backgroundColor = tweaks.backgroundColor.useState();
   
   return (
-    <div className="h-screen w-screen overflow-hidden" style={{ background: backgroundColor }}>
-      <Canvas camera={{ position: [0, 5, 10], fov: 50 }}>
+    <div className="h-full w-full overflow-hidden cursor-grab active:cursor-grabbing" style={{ background: backgroundColor }}>
+      <Canvas dpr={[1, 2]} camera={{ position: [0, 5, 10], fov: 50 }}>
+        <FitFov fov={50} minAspect={0.75} />
         <Scene />
       </Canvas>
     </div>

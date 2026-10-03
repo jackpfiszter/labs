@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { gizmoRuntime } from '@gizmo/runtime';
+import FitFov from './FitFov.js';
 
 const tweaks = gizmoRuntime.tweaks({
   cameraDistance: { index: 0, name: 'Camera Distance', type: 'slider', value: 2.7, min: 1, max: 10, step: 0.1 },
@@ -222,6 +223,7 @@ export default function Component() {
   
 
   const handlePointerDown = (e) => {
+    if (!e.isPrimary) return; // Ignore extra fingers so the drag doesn't jump
     isDraggingRef.current = true;
     e.target.setPointerCapture(e.pointerId); // Capture pointer for continuous dragging
     previousMousePositionRef.current = {
@@ -249,20 +251,24 @@ export default function Component() {
   };
 
   const handlePointerUp = (e) => {
+    if (!e.isPrimary) return;
     isDraggingRef.current = false;
-    e.target.releasePointerCapture(e.pointerId); // Release pointer capture
+    if (e.target.hasPointerCapture?.(e.pointerId)) e.target.releasePointerCapture(e.pointerId); // Release pointer capture
   };
   
   return (
-    <div className="w-screen h-screen overflow-hidden relative">
+    <div className="w-full h-full overflow-hidden relative cursor-grab active:cursor-grabbing">
       <Canvas
+        dpr={[1, 2]}
         camera={{ fov: 75, near: 0.1, far: 1000, position: [0, 0, cameraDistance] }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onPointerLeave={handlePointerUp} // onPointerLeave should also stop dragging
         style={{ touchAction: 'none' }}
       >
+        <FitFov fov={75} minAspect={0.65} />
         <ambientLight intensity={1.0} />
         <OceanSphere
           waveHeight={waveHeight}

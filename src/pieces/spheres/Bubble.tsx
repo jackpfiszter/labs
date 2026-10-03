@@ -1,8 +1,11 @@
-import React, { useRef, useEffect, useState, Suspense } from 'react';
+import React, { useRef, useEffect, useState, useMemo, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as Tone from 'tone';
 import * as THREE from 'three';
 import { gizmoRuntime } from '@gizmo/runtime';
+import FitFov from './FitFov.js';
+// The pop originally streamed from content.gizmo.party, which doesn't allow cross-origin requests.
+import popSoundUrl from './bubble-pop.m4a';
 
 const tweaks = gizmoRuntime.tweaks({
   iridescenceStrength: { index: 0, name: 'Iridescence Intensity', type: 'slider', value: 2.0, min: 0.0, max: 2.0, step: 0.1 },
@@ -62,7 +65,8 @@ const IridescentSphere = ({
   highlightIntensity,
   highlightSharpness,
   isBubbleVisible,
-  onBubbleTap
+  onBubbleTap,
+  onBubbleHover
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
@@ -282,8 +286,8 @@ const IridescentSphere = ({
     }
   `;
 
-  // Create shader material
-  const shaderMaterial = new THREE.ShaderMaterial({
+  // Create shader material once (uniforms are refreshed from props every frame below)
+  const shaderMaterial = useMemo(() => new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader,
     uniforms: {
@@ -312,7 +316,9 @@ const IridescentSphere = ({
     },
     transparent: true,
     depthWrite: false,
-  });
+  }), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => () => shaderMaterial.dispose(), [shaderMaterial]);
 
   useFrame((state) => {
     if (materialRef.current) {
@@ -371,7 +377,12 @@ const IridescentSphere = ({
   }
 
   return (
-    <mesh ref={meshRef} onClick={onBubbleTap}>
+    <mesh
+      ref={meshRef}
+      onClick={onBubbleTap}
+      onPointerOver={() => onBubbleHover(true)}
+      onPointerOut={() => onBubbleHover(false)}
+    >
       <sphereGeometry args={[2, 64, 32]} />
       <primitive object={shaderMaterial} ref={materialRef} attach="material" />
     </mesh>
@@ -405,7 +416,8 @@ const Scene = ({
   highlightIntensity,
   highlightSharpness,
   isBubbleVisible,
-  onBubbleTap
+  onBubbleTap,
+  onBubbleHover
 }) => {
   return (
     <>
@@ -447,6 +459,7 @@ const Scene = ({
           highlightSharpness={highlightSharpness}
           isBubbleVisible={isBubbleVisible}
           onBubbleTap={onBubbleTap}
+          onBubbleHover={onBubbleHover}
         />
       </Suspense>
     </>
@@ -458,8 +471,10 @@ export default function Component() {
   const [isBubbleVisible, setIsBubbleVisible] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [isAudioReady, setIsAudioReady] = useState(false);
+  const [isBubbleHovered, setIsBubbleHovered] = useState(false);
   const popSoundPlayer = useRef<Tone.Player | null>(null);
-  const [lastTouch, setLastTouch] = useState({ x: 0, y: 0 });
+  const respawnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTouch = useRef({ x: 0, y: 0 });
   
   const iridescenceStrength = tweaks.iridescenceStrength.useState();
   const roughness = tweaks.roughness.useState();
@@ -490,19 +505,19 @@ export default function Component() {
   const swirlSpeed = tweaks.swirlSpeed.useState();
   const respawnDelay = tweaks.respawnDelay.useState();
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  // Pointer events cover both touch drags and mouse drags.
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!e.isPrimary) return;
+    (e.target as Element).setPointerCapture?.(e.pointerId);
     setIsDragging(true);
-    const touch = e.touches[0];
-    setLastTouch({ x: touch.clientX, y: touch.clientY });
-
+    lastTouch.current = { x: e.clientX, y: e.clientY };
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging) return;
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging || !e.isPrimary) return;
     
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - lastTouch.x;
-    const deltaY = touch.clientY - lastTouch.y;
+    const deltaX = e.clientX - lastTouch.current.x;
+    const deltaY = e.clientY - lastTouch.current.y;
     
     setUserRotation(prev => {
       const newX = prev.x + deltaY * 0.01;
@@ -513,12 +528,12 @@ export default function Component() {
       };
     });
     
-    setLastTouch({ x: touch.clientX, y: touch.clientY });
+    lastTouch.current = { x: e.clientX, y: e.clientY };
   };
 
-  const handleTouchEnd = () => {
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!e.isPrimary) return;
     setIsDragging(false);
-
   };
 
   const resetRotation = () => {
@@ -526,36 +541,44 @@ export default function Component() {
   };
 
   useEffect(() => {
-    popSoundPlayer.current = new Tone.Player("https://content.gizmo.party/b9b82830-0cc6-42ed-bd92-3260350c1114").toDestination();
+    popSoundPlayer.current = new Tone.Player(popSoundUrl).toDestination();
     return () => {
       popSoundPlayer.current?.dispose();
+      popSoundPlayer.current = null;
+      if (respawnTimer.current) clearTimeout(respawnTimer.current);
     };
   }, []);
 
-  const handleBubbleTap = async () => {
-    if (!isAudioReady) {
-      await Tone.start();
-      setIsAudioReady(true);
-    }
+  const handleBubbleTap = (e) => {
+    // A drag that happens to end over the bubble is a spin, not a tap.
+    if (e?.delta > 10) return;
+    // Audio unlocks on this first tap/click; the pop never waits on it.
+    const audio = isAudioReady ? Promise.resolve() : Tone.start().then(() => setIsAudioReady(true));
+    audio.then(() => {
+      if (popSoundPlayer.current?.loaded) popSoundPlayer.current.start();
+    });
     gizmoRuntime.performHaptic('light');
-    popSoundPlayer.current?.start();
     setIsBubbleVisible(false);
-    setTimeout(() => {
+    setIsBubbleHovered(false);
+    respawnTimer.current = setTimeout(() => {
       setIsBubbleVisible(true);
     }, respawnDelay * 1000);
   };
 
   return (
     <>
-      <div aria-hidden className="fixed inset-0 -z-10" style={{ background: `radial-gradient(circle at center, ${gradientColor1} 0%, ${gradientColor2} 100%)` }} />
-      <div className="h-screen w-screen relative overflow-hidden">
+      <div aria-hidden className="absolute inset-0 -z-10" style={{ background: `radial-gradient(circle at center, ${gradientColor1} 0%, ${gradientColor2} 100%)` }} />
+      <div className="h-full w-full relative overflow-hidden" style={{ cursor: isBubbleHovered && !isDragging ? 'pointer' : isDragging ? 'grabbing' : 'grab' }}>
         <Canvas
+          dpr={[1, 2]}
           camera={{ position: [0, 0, 8], fov: 50 }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
           className="touch-none"
         >
+          <FitFov fov={50} minAspect={0.65} />
           <Scene 
             iridescenceStrength={iridescenceStrength}
             roughness={roughness}
@@ -584,6 +607,7 @@ export default function Component() {
             highlightSharpness={highlightSharpness}
             isBubbleVisible={isBubbleVisible}
             onBubbleTap={handleBubbleTap}
+            onBubbleHover={setIsBubbleHovered}
           />
         </Canvas>
         

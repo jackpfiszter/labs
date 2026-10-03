@@ -58,6 +58,36 @@ const tweaks = gizmoRuntime.tweaks({
   menuVerticalOffset: { index: 52, name: 'Menu Vertical Position', type: 'slider', value: -25.0, min: -200, max: 200, step: 5 },
 });
 
+// Scale `content` to fit inside `box` (never above `maxScale`). Measures the
+// untransformed layout size, so it can be combined with other transforms.
+const useFitScale = (
+  boxRef: React.RefObject<HTMLElement>,
+  contentRef: React.RefObject<HTMLElement>,
+  maxScale: number,
+  padY: number,
+  active: boolean,
+) => {
+  const [fit, setFit] = useState(1);
+  useEffect(() => {
+    const box = boxRef.current;
+    const content = contentRef.current;
+    if (!active || !box || !content) return;
+    const update = () => {
+      const w = content.offsetWidth;
+      const h = content.offsetHeight;
+      if (!w || !h) return;
+      const s = Math.min(maxScale, box.clientWidth / w, (box.clientHeight - padY) / h);
+      setFit(Number.isFinite(s) && s > 0 ? s : 1);
+    };
+    const ro = new ResizeObserver(update);
+    ro.observe(box);
+    ro.observe(content);
+    update();
+    return () => ro.disconnect();
+  }, [boxRef, contentRef, maxScale, padY, active]);
+  return fit;
+};
+
 const VS_SOURCE = `
   attribute vec4 a_position;
   void main() {
@@ -123,6 +153,15 @@ export default function Component() {
   const programRef = useRef<WebGLProgram | null>(null);
   const rafRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuBoxRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const finishedBoxRef = useRef<HTMLDivElement>(null);
+  const finishedRef = useRef<HTMLDivElement>(null);
+  // Container size drives layout: compact = short landscape (phone on its side).
+  const [rootSize, setRootSize] = useState({ w: 390, h: 844 });
+  const compact = rootSize.h < 560 && rootSize.w > rootSize.h;
+  const wide = rootSize.w >= 768;
 
   const backgroundColor = tweaks.backgroundColor.useState();
   const accentColor = tweaks.accentColor.useState();
@@ -188,6 +227,9 @@ export default function Component() {
   const overlayOpacity = tweaks.overlayOpacity.useState();
   const menuScale = tweaks.menuScale.useState();
   const menuVerticalOffset = tweaks.menuVerticalOffset.useState();
+  // Menu was designed for a ~390px phone: grow it on big screens, shrink it if it doesn't fit.
+  const menuFit = useFitScale(menuBoxRef, menuRef, wide ? 1.4 : 1, (compact ? 0 : Math.abs(menuVerticalOffset) * 2) + 16, gameState === 'menu');
+  const finishedFit = useFitScale(finishedBoxRef, finishedRef, wide ? 1.25 : 1, 48, gameState === 'finished');
 
   const hexToRgb = (hex: string) => {
     const r = parseInt(hex.slice(1, 3), 16) / 255;
@@ -232,6 +274,7 @@ export default function Component() {
     const program = programRef.current;
     if (!gl || !program) return;
 
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     gl.useProgram(program);
     gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), gl.canvas.width, gl.canvas.height);
     gl.uniform1f(gl.getUniformLocation(program, 'u_time'), (time - startTimeRef.current) * 0.001);
@@ -268,6 +311,24 @@ export default function Component() {
     };
   }, [initGL, gameState, render]);
 
+  // Size the canvas from its container (2x supersampled, as originally) and track the root size.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const root = rootRef.current;
+    if (!canvas || !root) return;
+    const ro = new ResizeObserver(() => {
+      setRootSize({ w: root.clientWidth, h: root.clientHeight });
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (!w || !h) return;
+      canvas.width = Math.round(w * 2);
+      canvas.height = Math.round(h * 2);
+    });
+    ro.observe(root);
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     if (gameState === 'active') {
       setTimeLeft(timerDuration);
@@ -301,12 +362,22 @@ export default function Component() {
     setGameState('menu');
   };
 
+  // Desktop: Enter / Space begins (menu) or restarts (finished) when no button has focus.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (document.activeElement && document.activeElement !== document.body) return;
+      if (gameState === 'menu') { e.preventDefault(); startExperience(); }
+      else if (gameState === 'finished') { e.preventDefault(); resetExperience(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [gameState]);
+
   return (
-    <div className="h-screen w-screen overflow-hidden relative font-mono" style={{ backgroundColor }}>
+    <div ref={rootRef} className="h-screen w-screen overflow-hidden relative font-mono" style={{ backgroundColor }}>
       <canvas
         ref={canvasRef}
-        width={window.innerWidth * 2}
-        height={window.innerHeight * 2}
         className="absolute inset-0 w-full h-full"
         style={{ 
           display: gameState === 'finished' ? 'none' : 'block',
@@ -315,10 +386,18 @@ export default function Component() {
       />
 
       {/* UI Overlay */}
-      <div className="relative z-10 h-full w-full flex flex-col items-center p-6 pointer-events-none">
+      <div
+        className="relative z-10 h-full w-full flex flex-col items-center pointer-events-none"
+        style={{
+          paddingTop: `max(${compact ? 1 : 1.5}rem, env(safe-area-inset-top))`,
+          paddingBottom: `max(${compact ? 1 : 1.5}rem, env(safe-area-inset-bottom))`,
+          paddingLeft: `max(${compact ? 1 : 1.5}rem, env(safe-area-inset-left))`,
+          paddingRight: `max(${compact ? 1 : 1.5}rem, env(safe-area-inset-right))`,
+        }}
+      >
         
         {/* Header / Active State Info */}
-        <div className={`text-center w-full ${gameState === 'menu' ? 'mt-4 mb-4' : 'absolute top-12 left-0 right-0'}`}>
+        <div className={`text-center w-full ${gameState === 'menu' ? (compact ? '' : 'mt-4 mb-4') : `absolute ${compact ? 'top-4' : 'top-[max(3rem,env(safe-area-inset-top))]'} left-0 right-0`}`}>
           {titleVisible && gameState === 'menu' && (
             <div className="inline-block bg-white border-4 border-black p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transform -rotate-2">
               <h1 style={{ color: titleColor, fontSize: `${titleSize}px` }} className="font-black uppercase tracking-tighter leading-none">
@@ -345,7 +424,7 @@ export default function Component() {
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col items-center justify-center w-full">
+        <div ref={menuBoxRef} className="flex-1 min-h-0 flex flex-col items-center justify-center w-full">
           {/* Center Dot */}
           {gameState === 'active' && (
             <div 
@@ -357,13 +436,14 @@ export default function Component() {
           {/* Menu State */}
           {gameState === 'menu' && (
             <div 
-              className="w-full max-w-xs flex flex-col gap-6 pointer-events-auto animate-in fade-in zoom-in duration-300"
+              ref={menuRef}
+              className={`w-full flex gap-6 shrink-0 pointer-events-auto animate-in fade-in zoom-in duration-300 ${compact ? 'max-w-2xl flex-row items-stretch' : 'max-w-xs flex-col'}`}
               style={{ 
-                transform: `translateY(${menuVerticalOffset}px) scale(${menuScale})`,
+                transform: `translateY(${compact ? 0 : menuVerticalOffset}px) scale(${menuScale * menuFit})`,
                 transformOrigin: 'center center'
               }}
             >
-              <div className="bg-white border-4 border-black p-6 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
+              <div className={`bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden ${compact ? 'flex-1 p-4' : 'p-6'}`}>
                 {/* Subtle inner card pattern */}
                 <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)', backgroundSize: '10px 10px' }} />
                 
@@ -371,12 +451,12 @@ export default function Component() {
                   {selectPatternVisible && (
                     <span 
                       style={{ color: selectPatternColor, fontSize: `${selectPatternSize}px` }} 
-                      className="bg-black px-2 py-1 font-bold uppercase tracking-widest inline-block mb-4"
+                      className={`bg-black px-2 py-1 font-bold uppercase tracking-widest inline-block ${compact ? 'mb-3' : 'mb-4'}`}
                     >
                       {selectPatternText}
                     </span>
                   )}
-                  <div className="flex flex-col gap-3">
+                  <div className={compact ? 'grid grid-cols-3 gap-3' : 'flex flex-col gap-3'}>
                     {[
                       { id: 0, text: pattern1Text, color: pattern1Color, size: pattern1Size, visible: pattern1Visible },
                       { id: 1, text: pattern2Text, color: pattern2Color, size: pattern2Size, visible: pattern2Visible },
@@ -388,10 +468,10 @@ export default function Component() {
                           setActivePattern(p.id as 0 | 1 | 2);
                           gizmoRuntime.performHaptic('light');
                         }}
-                        className={`py-3 px-4 border-4 border-black font-black uppercase transition-all transform active:translate-x-1 active:translate-y-1 active:shadow-none ${
+                        className={`py-3 px-4 min-h-[44px] border-4 border-black font-black uppercase transition-all transform active:translate-x-1 active:translate-y-1 active:shadow-none ${
                           activePattern === p.id 
                             ? 'bg-[#53B5F9] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1 -translate-x-1' 
-                            : 'bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                            : 'bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] [@media(hover:hover)]:hover:-translate-y-0.5 [@media(hover:hover)]:hover:-translate-x-0.5'
                         }`}
                       >
                         <span style={{ color: p.color, fontSize: `${p.size}px` }}>{p.text}</span>
@@ -400,13 +480,13 @@ export default function Component() {
                   </div>
                 </div>
                 
-                <div className="flex items-start gap-3 text-black font-bold leading-tight mt-6 border-t-4 border-black pt-4">
+                <div className={`flex items-start gap-3 text-black font-bold leading-tight border-t-4 border-black ${compact ? 'mt-4 pt-3' : 'mt-6 pt-4'}`}>
                   <Info size={20} strokeWidth={3} className="shrink-0" />
                   <p className="uppercase" style={{ fontSize: `${instructionSize}px`, color: instructionColor }}>Stare at the red dot for {timerDuration} seconds. Then look around!</p>
                 </div>
 
                 {disclaimerVisible && (
-                  <div className="mt-4 pt-4 border-t-2 border-black border-dashed">
+                  <div className={`border-t-2 border-black border-dashed ${compact ? 'mt-3 pt-3' : 'mt-4 pt-4'}`}>
                     <p 
                       style={{ color: disclaimerColor, fontSize: `${disclaimerSize}px` }} 
                       className="font-black leading-tight uppercase"
@@ -420,7 +500,7 @@ export default function Component() {
               {beginBtnVisible && (
                 <button
                   onClick={startExperience}
-                  className="w-full py-6 border-4 border-black font-black uppercase tracking-widest flex items-center justify-center gap-3 transform hover:-translate-y-1 hover:-translate-x-1 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]"
+                  className={`border-4 border-black font-black uppercase tracking-widest flex items-center justify-center gap-3 transform ${compact ? 'w-44 shrink-0 flex-col px-4' : 'w-full py-6'} hover:-translate-y-1 hover:-translate-x-1 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]`}
                   style={{ backgroundColor: accentColor, color: beginBtnColor, fontSize: `${beginBtnSize}px` }}
                 >
                   <Play fill="currentColor" size={beginBtnSize + 4} />
@@ -433,8 +513,21 @@ export default function Component() {
 
         {/* Finished State */}
         {gameState === 'finished' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-8 bg-[#E432B7] pointer-events-auto">
-            <div className="bg-white border-8 border-black p-8 shadow-[20px_20px_0px_0px_rgba(0,0,0,1)] text-center transform rotate-2">
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center bg-[#E432B7] pointer-events-auto"
+            style={{
+              paddingTop: `max(${compact ? 1 : 2}rem, env(safe-area-inset-top))`,
+              paddingBottom: `max(${compact ? 1 : 2}rem, env(safe-area-inset-bottom))`,
+              paddingLeft: `max(2rem, env(safe-area-inset-left))`,
+              paddingRight: `max(2rem, env(safe-area-inset-right))`,
+            }}
+          >
+            <div ref={finishedBoxRef} className="w-full h-full min-h-0 flex items-center justify-center">
+            <div
+              ref={finishedRef}
+              className="bg-white border-8 border-black p-8 shadow-[20px_20px_0px_0px_rgba(0,0,0,1)] text-center max-w-full"
+              style={{ transform: `rotate(2deg) scale(${finishedFit})` }}
+            >
               <div className="bg-black inline-block p-4 mb-6">
                 <Eye size={80} color="#FFFFFF" strokeWidth={3} />
               </div>
@@ -457,6 +550,7 @@ export default function Component() {
                   {tryAgainBtnText}
                 </button>
               )}
+            </div>
             </div>
           </div>
         )}

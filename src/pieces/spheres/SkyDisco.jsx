@@ -2,6 +2,7 @@ import React, { useRef, useMemo, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
+import FitFov from './FitFov.js';
 const tweaks = {
   ballColor: '#FFFFFF',
   rotationSpeed: 0.2,
@@ -449,9 +450,10 @@ export default function Component() {
   const cameraDistance = tweaks.cameraDistance;
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
-      <Canvas dpr={window.devicePixelRatio} gl={{ antialias: true, powerPreference: 'high-performance' }}>
+    <div style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative', background: '#000', cursor: 'grab' }}>
+      <Canvas dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }}>
         <PerspectiveCamera makeDefault position={[0, 0, cameraDistance]} />
+        <FitFov fov={50} minAspect={0.5} />
         <OrbitControls enablePan={false} minDistance={4} maxDistance={20} />
         <Suspense fallback={null}>
           <ProceduralBackground />

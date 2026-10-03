@@ -325,11 +325,11 @@ const AcidTrack = () => {
     };
 
     // We need a user interaction to start the audio context.
-    // This will be triggered by the main component's touch handler.
-    document.addEventListener('touchstart', startAudio, { once: true });
+    // This will be triggered by the main component's pointer handler.
+    document.addEventListener('pointerdown', startAudio, { once: true });
 
     return () => {
-      document.removeEventListener('touchstart', startAudio);
+      document.removeEventListener('pointerdown', startAudio);
       if (Tone.Transport.state === 'started') {
         Tone.Transport.stop();
       }
@@ -357,11 +357,16 @@ export default function Component() {
   const backgroundColor = tweaks.backgroundColor.useState();
   const defaultZoom = tweaks.defaultZoom.useState();
   const [audioReady, setAudioReady] = useState(false);
+  const audioStartedRef = useRef(false);
 
+  // Called on pointerdown (mouse/pen) and pointerup (touch: browsers only unlock
+  // audio on touchend/pointerup), plus Space/Enter. Safe to call repeatedly.
   const handleInteraction = useCallback(async () => {
-    if (!audioReady) {
+    if (!audioReady && !audioStartedRef.current) {
       try {
         await Tone.start();
+        if (Tone.getContext().state !== 'running' || audioStartedRef.current) return;
+        audioStartedRef.current = true;
         if (Tone.Transport.state !== 'started') {
           Tone.Transport.start();
         }
@@ -373,6 +378,15 @@ export default function Component() {
       }
     }
   }, [audioReady]);
+
+  // Keyboard (desktop): Space / Enter also starts the audio
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === ' ' || e.key === 'Enter') handleInteraction();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleInteraction]);
 
   // Ensure transport stops when component unmounts
   useEffect(() => {
@@ -387,10 +401,10 @@ export default function Component() {
   return (
     <>
       <div aria-hidden className="fixed inset-0 -z-10" style={{ background: backgroundColor }} />
-      <div className="h-screen w-screen" onTouchStart={handleInteraction}>
+      <div className="h-screen w-screen cursor-grab active:cursor-grabbing" onPointerDown={handleInteraction} onPointerUp={handleInteraction}>
         <Canvas 
           camera={{ position: [0, 0, defaultZoom], fov: 60 }} 
-          dpr={[0.5, 1]} // Lower DPR for better performance
+          dpr={[1, 2]}
           gl={{ 
             antialias: false, // Disable for pixel art
             powerPreference: "high-performance",

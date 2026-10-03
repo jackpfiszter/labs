@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, Suspense } from 'react';
 import { gizmoRuntime } from '@gizmo/runtime';
-import { Canvas, useFrame, useLoader } from '@react-three/fiber';
+import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber';
 import { TextureLoader, Color, RepeatWrapping } from 'three';
 
 const tweaks = gizmoRuntime.tweaks({
@@ -38,6 +38,7 @@ const fragmentShader = `
   uniform float u_causticIntensity;
   uniform float u_warpFactor;
   uniform float u_innerTileScale;
+  uniform float u_uvScale;
 
   varying vec2 vUv;
 
@@ -61,7 +62,8 @@ const fragmentShader = `
   }
 
   void main() {
-    vec2 uv = vUv;
+    // Plane is scaled up to cover wide/tall viewports; scale UVs to match so tiles keep their size
+    vec2 uv = (vUv - 0.5) * u_uvScale + 0.5;
     
     // Warp the UVs to simulate looking through water
     float warp = water(uv * 5.0) * u_warpFactor;
@@ -121,6 +123,11 @@ const shadowFragmentShader = `
   }
 `;
 
+// On narrow (portrait) pools, pull the camera back so the floating ring (which drifts +/-0.2 and is ~0.5 wide) stays fully in view.
+const BASE_VISIBLE_HEIGHT = 2 * Math.tan((75 / 2) * Math.PI / 180); // default fov 75, z = 1
+const MIN_VISIBLE_WIDTH = 0.95;
+const fitCameraZ = (aspect: number) => Math.max(1, MIN_VISIBLE_WIDTH / (BASE_VISIBLE_HEIGHT * aspect));
+
 function PoolRing() {
   const ringRef = useRef<any>();
   const shadowRef = useRef<any>();
@@ -137,8 +144,15 @@ function PoolRing() {
     const swapRing = () => {
       setRingIndex(prev => (prev + 1) % ringTextures.length);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); swapRing(); }
+    };
     window.addEventListener('click', swapRing);
-    return () => window.removeEventListener('click', swapRing);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('click', swapRing);
+      window.removeEventListener('keydown', onKey);
+    };
   }, [ringTextures.length]);
 
   const ringFloatSpeed = tweaks.ringFloatSpeed.useState();
@@ -201,6 +215,11 @@ function PoolShader() {
   const poolColor = tweaks.poolColor.useState();
   const causticColor = tweaks.causticColor.useState();
   const innerTileScale = tweaks.innerTileScale.useState();
+  const { size } = useThree();
+  // Cover the whole visible area (the 2x2 plane alone leaves gaps on wide screens / when zoomed out)
+  const aspect = size.width / Math.max(1, size.height);
+  const visibleHeight = BASE_VISIBLE_HEIGHT * fitCameraZ(aspect);
+  const poolScale = Math.max(1, visibleHeight / 2, (visibleHeight * aspect) / 2) * 1.02;
 
   useFrame(({ clock }) => {
     if (materialRef.current) {
@@ -210,21 +229,24 @@ function PoolShader() {
       materialRef.current.uniforms.u_poolColor.value.set(poolColor);
       materialRef.current.uniforms.u_causticColor.value.set(causticColor);
       materialRef.current.uniforms.u_innerTileScale.value = innerTileScale;
+      materialRef.current.uniforms.u_uvScale.value = poolScale;
+      materialRef.current.uniforms.u_resolution.value = [size.width, size.height];
     }
   });
 
   const uniforms = {
     u_time: { value: 0 },
-    u_resolution: { value: [window.innerWidth, window.innerHeight] },
+    u_resolution: { value: [size.width, size.height] },
     u_poolColor: { value: new Color(poolColor) },
     u_causticColor: { value: new Color(causticColor) },
     u_causticIntensity: { value: causticIntensity },
     u_warpFactor: { value: warpFactor },
     u_innerTileScale: { value: innerTileScale },
+    u_uvScale: { value: poolScale },
   };
 
   return (
-    <mesh>
+    <mesh scale={[poolScale, poolScale, 1]}>
       <planeGeometry args={[2, 2]} />
       <shaderMaterial
         ref={materialRef}
@@ -236,13 +258,22 @@ function PoolShader() {
   );
 }
 
+function CameraFit() {
+  const { camera, size } = useThree();
+  useEffect(() => {
+    camera.position.set(0, 0, fitCameraZ(size.width / Math.max(1, size.height)));
+    camera.updateProjectionMatrix();
+  }, [camera, size.width, size.height]);
+  return null;
+}
+
 export default function Component() {
   const borderColor = tweaks.borderColor.useState();
   const poolMargin = tweaks.poolMargin.useState();
   const outerTileScale = tweaks.outerTileScale.useState();
   
   return (
-    <div className="h-screen w-screen overflow-hidden" style={{ backgroundColor: borderColor }}>
+    <div className="h-screen w-screen overflow-hidden cursor-pointer" style={{ backgroundColor: borderColor }}>
       {/* Much larger pool simulation window */}
       <div 
         className="absolute"
@@ -253,7 +284,8 @@ export default function Component() {
           bottom: `${poolMargin}px`,
         }}
       >
-        <Canvas camera={{ position: [0, 0, 1] }}>
+        <Canvas camera={{ position: [0, 0, 1] }} dpr={[1, 2]}>
+          <CameraFit />
           <Suspense fallback={null}>
             <PoolShader />
             <PoolRing />

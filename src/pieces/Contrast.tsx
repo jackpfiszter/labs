@@ -57,6 +57,7 @@ export default function Component() {
   const colorInterval = useRef(null);
   const vibrationInterval = useRef(null);
   const touchStartX = useRef(0);
+  const activePointer = useRef<number | null>(null);
 
   const topColor = colorHistory[historyIndex]?.top;
   const bottomColor = topColor ? getComplementaryColor(topColor) : '#000000';
@@ -87,23 +88,30 @@ export default function Component() {
     }
   }, [isPaused, colorHistory.length]);
 
+  // Press and hold (touch or mouse) pauses; drag sideways to scrub history
   const handleTouchStart = (e) => {
-    touchStartX.current = e.touches[0].clientX;
+    if (activePointer.current !== null || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    activePointer.current = e.pointerId;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    touchStartX.current = e.clientX;
     
     setIsPaused(true);
     gizmoRuntime.performHaptic('medium');
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e) => {
+    if (e.pointerId !== activePointer.current) return;
+    activePointer.current = null;
     setIsPaused(false);
     gizmoRuntime.performHaptic('light');
     touchStartX.current = 0;
   };
 
   const handleTouchMove = useCallback((e) => {
+    if (e.pointerId !== activePointer.current) return;
     if (!isPaused || touchStartX.current === 0) return;
 
-    const currentX = e.touches[0].clientX;
+    const currentX = e.clientX;
     const deltaX = currentX - touchStartX.current;
 
     if (Math.abs(deltaX) > 30) { // Swipe threshold
@@ -117,12 +125,44 @@ export default function Component() {
     }
   }, [isPaused, colorHistory.length]);
 
+  // Keyboard: hold Space to pause, arrow keys to scrub while paused
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!e.repeat) {
+          setIsPaused(true);
+          gizmoRuntime.performHaptic('medium');
+        }
+      } else if (e.key === 'ArrowLeft') {
+        setHistoryIndex(prev => Math.max(0, prev - 1));
+      } else if (e.key === 'ArrowRight') {
+        setHistoryIndex(prev => Math.min(colorHistory.length - 1, prev + 1));
+      }
+    };
+    const onKeyUp = (e) => {
+      if (e.code === 'Space' && activePointer.current === null) {
+        setIsPaused(false);
+        gizmoRuntime.performHaptic('light');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [colorHistory.length]);
+
   return (
     <div 
-      className="h-screen w-screen flex flex-col"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onTouchMove={handleTouchMove}
+      className={`h-screen w-screen flex flex-col ${isPaused ? 'cursor-grabbing' : 'cursor-grab'}`}
+      style={{ touchAction: 'none' }}
+      onPointerDown={handleTouchStart}
+      onPointerUp={handleTouchEnd}
+      onPointerCancel={handleTouchEnd}
+      onPointerMove={handleTouchMove}
+      onContextMenu={(e) => e.preventDefault()}
     >
       {/* Top half */}
       <div 
@@ -135,15 +175,15 @@ export default function Component() {
               className="font-mono text-center"
               style={{ color: topTextColor }}
             >
-              <div className="font-bold" style={{ fontSize: `${hexCodeSize}px` }}>
+              <div className="font-bold" style={{ fontSize: `max(${hexCodeSize}px, ${hexCodeSize * 0.2}vmin)` }}>
                 {topColor.toUpperCase()}
               </div>
-              <div style={{ fontSize: `${colorNameSize}px`, textTransform: 'capitalize' }}>
+              <div style={{ fontSize: `max(${colorNameSize}px, ${colorNameSize * 0.2}vmin)`, textTransform: 'capitalize' }}>
                 {getColorName(topColor)}
               </div>
             </div>
-            <div className="absolute left-4 text-4xl opacity-50" style={{ color: topTextColor }}>â€¹</div>
-            <div className="absolute right-4 text-4xl opacity-50" style={{ color: topTextColor }}>â€º</div>
+            <div className="absolute left-[max(1rem,env(safe-area-inset-left))] text-4xl md:text-6xl opacity-50" style={{ color: topTextColor }}>‹</div>
+            <div className="absolute right-[max(1rem,env(safe-area-inset-right))] text-4xl md:text-6xl opacity-50" style={{ color: topTextColor }}>›</div>
           </>
         )}
       </div>
@@ -159,15 +199,15 @@ export default function Component() {
               className="font-mono text-center"
               style={{ color: bottomTextColor }}
             >
-              <div className="font-bold" style={{ fontSize: `${hexCodeSize}px` }}>
+              <div className="font-bold" style={{ fontSize: `max(${hexCodeSize}px, ${hexCodeSize * 0.2}vmin)` }}>
                 {bottomColor.toUpperCase()}
               </div>
-              <div style={{ fontSize: `${colorNameSize}px`, textTransform: 'capitalize' }}>
+              <div style={{ fontSize: `max(${colorNameSize}px, ${colorNameSize * 0.2}vmin)`, textTransform: 'capitalize' }}>
                 {getColorName(bottomColor)}
               </div>
             </div>
-            <div className="absolute left-4 text-4xl opacity-50" style={{ color: bottomTextColor }}>â€¹</div>
-            <div className="absolute right-4 text-4xl opacity-50" style={{ color: bottomTextColor }}>â€º</div>
+            <div className="absolute left-[max(1rem,env(safe-area-inset-left))] text-4xl md:text-6xl opacity-50" style={{ color: bottomTextColor }}>‹</div>
+            <div className="absolute right-[max(1rem,env(safe-area-inset-right))] text-4xl md:text-6xl opacity-50" style={{ color: bottomTextColor }}>›</div>
           </>
         )}
       </div>

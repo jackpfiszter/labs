@@ -375,7 +375,7 @@ export default function Component() {
   }, [cameraDistance, cameraOrbit]);
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#000' }}>
+    <div style={{ width: '100%', height: '100%', overflow: 'hidden', background: '#000', cursor: 'grab' }}>
       <Canvas dpr={[1, 2]} gl={{ antialias: true, alpha: true }} style={{ width: '100%', height: '100%' }}>
         <PerspectiveCamera makeDefault position={cameraPosition} />
         <OrbitControls enablePan={false} minDistance={3} maxDistance={20} />

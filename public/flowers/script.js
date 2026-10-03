@@ -58,8 +58,8 @@ window.addEventListener('deviceorientation', (e) => {
   tiltX = Math.max(-1, Math.min(1, e.gamma / 30));
   tiltY = Math.max(-1, Math.min(1, (45 - e.beta) / 30));  // phones are usually held ~45° up
 });
-// iOS only grants orientation access from a tap
-window.addEventListener('pointerdown', () => {
+// iOS only grants orientation access from the end of a tap
+window.addEventListener('touchend', () => {
   globalThis.DeviceOrientationEvent?.requestPermission?.().catch(() => {});
 }, { once: true });
 
@@ -226,10 +226,22 @@ function worldXFromClick(clientX, worldZ) {
   return ndcX * Math.tan(camera.fov * Math.PI / 360) * dist * camera.aspect;
 }
 
-window.addEventListener('click', (e) => {
+// Plant on a tap or click. iOS Safari doesn't send `click` for taps on a plain
+// canvas, so taps are detected from pointer down/up; drags don't plant.
+let tapStart = null;
+window.addEventListener('pointerdown', (e) => {
+  if (e.isPrimary) tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
+});
+window.addEventListener('pointerup', (e) => {
+  if (!e.isPrimary || !tapStart) return;
+  const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y);
+  const quick = performance.now() - tapStart.t < 500;
+  tapStart = null;
+  if (moved > 10 || !quick) return;
   const worldZ = Math.random() * 10 - 8;  // -8 (background) to 2 (foreground)
   createFlower(worldXFromClick(e.clientX, worldZ), worldZ, performance.now() / 1000);
 });
+window.addEventListener('pointercancel', () => { tapStart = null; });
 
 // ── Animation loop ─────────────────────────────────────────────────────────
 let initialized = false;

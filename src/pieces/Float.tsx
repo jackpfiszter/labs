@@ -147,10 +147,22 @@ function PoolRing() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); swapRing(); }
     };
-    window.addEventListener('click', swapRing);
+    // Swap on a tap or click. iOS Safari doesn't send `click` for taps on a plain
+    // canvas, so taps are detected from pointer down/up instead.
+    let tapStart: { x: number; y: number } | null = null;
+    const onDown = (e: PointerEvent) => { if (e.isPrimary) tapStart = { x: e.clientX, y: e.clientY }; };
+    const onUp = (e: PointerEvent) => {
+      if (!e.isPrimary || !tapStart) return;
+      const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y);
+      tapStart = null;
+      if (moved <= 10) swapRing();
+    };
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointerup', onUp);
     window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('click', swapRing);
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointerup', onUp);
       window.removeEventListener('keydown', onKey);
     };
   }, [ringTextures.length]);

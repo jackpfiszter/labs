@@ -10,6 +10,11 @@ html, body {
   height: 100%;
   overflow: hidden;
   background: #000;
+  overscroll-behavior: none;
+  touch-action: none;                   /* taps plant flowers; no page scroll or zoom */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
 /* Three.js appends canvas to body — target it */

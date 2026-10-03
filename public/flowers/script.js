@@ -28,17 +28,40 @@ stemGeo.translate(0, STEM_HEIGHT_MAX / 2, 0);
 // PlaneGeometry size = 1.4 * 1.5 = 2.1 keeps world-space petal size identical
 const petalGeo = new THREE.PlaneGeometry(2.1, 2.1);
 
-// ── Mouse world position ───────────────────────────────────────────────────
+// ── Pointer world position ─────────────────────────────────────────────────
+// Mouse hover, or a finger while it's down, pushes the flowers and steers the camera.
 let mouseWorldX = 0, mouseWorldY = 0, mouseNdcX = 0, mouseNdcY = 0;
-window.addEventListener('mousemove', (e) => {
-  const ndcX =  (e.clientX / innerWidth)  * 2 - 1;
-  const ndcY = -(e.clientY / innerHeight) * 2 + 1;
+function setPointer(clientX, clientY) {
+  const ndcX =  (clientX / innerWidth)  * 2 - 1;
+  const ndcY = -(clientY / innerHeight) * 2 + 1;
   mouseNdcX = ndcX;
   mouseNdcY = ndcY;
   const halfTan = Math.tan(camera.fov * Math.PI / 360) * camera.position.z;
   mouseWorldX = ndcX * halfTan * camera.aspect;
   mouseWorldY = ndcY * halfTan;
+}
+window.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'mouse' || e.buttons) setPointer(e.clientX, e.clientY);
 });
+window.addEventListener('pointerdown', (e) => setPointer(e.clientX, e.clientY));
+// When a finger lifts, move the push point far away so the flowers settle back
+window.addEventListener('pointerup', (e) => {
+  if (e.pointerType !== 'mouse') { mouseWorldX = mouseWorldY = 1e3; }
+});
+
+// ── Device tilt ────────────────────────────────────────────────────────────
+// On phones there's no hover, so tilting steers the camera instead.
+let tiltX = 0, tiltY = 0, hasTilt = false;
+window.addEventListener('deviceorientation', (e) => {
+  if (e.beta == null || e.gamma == null) return;
+  hasTilt = true;
+  tiltX = Math.max(-1, Math.min(1, e.gamma / 30));
+  tiltY = Math.max(-1, Math.min(1, (45 - e.beta) / 30));  // phones are usually held ~45° up
+});
+// iOS only grants orientation access from a tap
+window.addEventListener('pointerdown', () => {
+  globalThis.DeviceOrientationEvent?.requestPermission?.().catch(() => {});
+}, { once: true });
 
 let currentCamX = 0, currentCamY = 0;
 
@@ -258,8 +281,10 @@ renderer.setAnimationLoop((ms) => {
     f.pMesh.position.y = camera.position.y + (stemTipY - camera.position.y) * depthRatio;
   }
 
-  currentCamX += (mouseNdcX * 1.5 - currentCamX) * 0.04;
-  currentCamY += (mouseNdcY * 1.5 - currentCamY) * 0.04;
+  const camTargetX = hasTilt ? tiltX : mouseNdcX;
+  const camTargetY = hasTilt ? tiltY : mouseNdcY;
+  currentCamX += (camTargetX * 1.5 - currentCamX) * 0.04;
+  currentCamY += (camTargetY * 1.5 - currentCamY) * 0.04;
   camera.position.x = currentCamX;
   camera.position.y = currentCamY;
   camera.lookAt(0, 0, 0);
@@ -270,7 +295,8 @@ renderer.setAnimationLoop((ms) => {
 function resizeIfNeeded() {
   const canvas = renderer.domElement;
   const w = canvas.clientWidth, h = canvas.clientHeight;
-  if (canvas.width !== w || canvas.height !== h) {
+  const pr = renderer.getPixelRatio();
+  if (canvas.width !== Math.floor(w * pr) || canvas.height !== Math.floor(h * pr)) {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
